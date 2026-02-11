@@ -1,0 +1,64 @@
+import os
+
+# ==============================
+# CONFIGURATION
+# ==============================
+
+FASTA_ROOT_DIR = "fasta_downloads"  # dossier racine de tes séquences
+MOTIF = "gggccc"
+
+# ==============================
+# FONCTION DE COMPTAGE
+# ==============================
+
+def count_motif_in_sequence(sequence, motif):
+    count = 0
+    start = 0
+    while True:
+        pos = sequence.find(motif, start)
+        if pos == -1:
+            break
+        count += 1
+        start = pos + 1  # permet les occurrences chevauchantes
+    return count
+
+
+# ==============================
+# PARCOURS DES FICHIERS
+# ==============================
+
+total_count = 0
+results = {}
+
+for root, dirs, files in os.walk(FASTA_ROOT_DIR):
+    for file in files:
+        if file.endswith(".fasta"):
+            filepath = os.path.join(root, file)
+
+            with open(filepath, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            # On enlève les headers > et on concatène
+            sequence = "".join(
+                line.strip()
+                for line in lines
+                if not line.startswith(">")
+            ).lower()
+
+            count = count_motif_in_sequence(sequence, MOTIF)
+
+            results[filepath] = count
+            total_count += count
+
+
+# ==============================
+# RESULTATS
+# ==============================
+
+print("\nOccurrences par fichier :\n")
+for file, count in results.items():
+    print(f"{file} → {count}")
+
+print("\n=============================")
+print(f"TOTAL global de '{MOTIF}' : {total_count}")
+print("=============================")
