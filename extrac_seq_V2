@@ -1,77 +1,23 @@
 import requests
 
-# ==============================
-# CONFIGURATION
-# ==============================
-URL = "https://ton-serveur.com/endpoint"   # ← Remplace par ton URL
-OUTPUT_FILE = "sequences_nettoyees.fasta"
+BASE_URL = "http://serveur"
+DATASET = "sequences"
+COUNTRY = "FR"
+TRIMESTER = "1987Q1"
 
-# ==============================
-# TELECHARGEMENT DES DONNEES
-# ==============================
-response = requests.get(URL)
+URL = f"{BASE_URL}/archived/{DATASET}/{COUNTRY}/{TRIMESTER}"
 
-if response.status_code != 200:
-    raise Exception(f"Erreur GET : {response.status_code}")
+proxies = None  # mettre ton proxy ici si besoin
 
-raw_data = response.text
+try:
+    response = requests.get(URL, timeout=30, proxies=proxies)
+    response.raise_for_status()
+except requests.exceptions.RequestException as e:
+    print("Erreur connexion :", e)
+    exit()
 
+with open("sequences_1987Q1_FR.fasta", "w") as f:
+    f.write(response.text)
 
-# ==============================
-# PARSING DES SEQUENCES
-# ==============================
-def parse_sequences(text):
-    sequences = {}
-    current_id = None
-    current_seq = []
+print("Téléchargement terminé")
 
-    for line in text.splitlines():
-        line = line.strip()
-
-        # Ligne d'identifiant
-        if line.startswith(">"):
-            if current_id:
-                sequences[current_id] = "".join(current_seq)
-            current_id = line[1:]  # enlever le >
-            current_seq = []
-
-        # Ignorer les lignes de séparation (pleines de -)
-        elif set(line) == {"-"}:
-            continue
-
-        # Ligne de séquence
-        else:
-            current_seq.append(line)
-
-    # Sauvegarde dernière séquence
-    if current_id:
-        sequences[current_id] = "".join(current_seq)
-
-    return sequences
-
-
-sequences = parse_sequences(raw_data)
-
-
-# ==============================
-# NETTOYAGE DES SEQUENCES
-# ==============================
-def clean_sequence(seq):
-    return seq.replace("-", "").lower()
-
-
-cleaned_sequences = {
-    seq_id: clean_sequence(seq)
-    for seq_id, seq in sequences.items()
-}
-
-
-# ==============================
-# SAUVEGARDE EN FASTA
-# ==============================
-with open(OUTPUT_FILE, "w") as f:
-    for seq_id, seq in cleaned_sequences.items():
-        f.write(f">{seq_id}\n")
-        f.write(seq + "\n")
-
-print(f"{len(cleaned_sequences)} séquences sauvegardées dans {OUTPUT_FILE}")
