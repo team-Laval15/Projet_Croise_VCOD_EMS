@@ -5,11 +5,11 @@ import os
 # CONFIGURATION
 # ==============================
 
-BASE_URL = "http://serveur"   # ← à modifier
+BASE_URL = "http://172.22.215.130:8080"   
 DATASET = "sequences"
 
-START_YEAR = 1987
-END_YEAR = 1990
+START_YEAR = 1970
+END_YEAR = 2025
 
 COUNTRIES = [
     "PT","CH","DE","GB","CZ","FR","DK","LV","RU","HR","SI","GR","IT","RO",
@@ -22,7 +22,7 @@ TRIMESTERS = ["Q1", "Q2", "Q3", "Q4"]
 OUTPUT_DIR = "fasta_data"
 
 # Proxy si nécessaire
-PROXIES = None
+# PROXIES = None
 
 TIMEOUT = 15
 
@@ -46,7 +46,7 @@ for country in COUNTRIES:
             print(f"Test {country} {trimester}...")
 
             try:
-                response = requests.get(url, timeout=TIMEOUT, proxies=PROXIES)
+                response = requests.get(url, timeout=TIMEOUT)
 
                 # On vérifie que ça contient des séquences
                 if response.status_code == 200 and response.text.strip():
