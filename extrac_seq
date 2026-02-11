@@ -1,6 +1,5 @@
 import requests
 import os
-import time
 
 # ==============================
 # CONFIGURATION
@@ -12,10 +11,6 @@ DATASET = "sequences"
 START_YEAR = 1987
 END_YEAR = 1990
 
-OUTPUT_DIR = "fasta_by_trimester"
-TIMEOUT = 15
-SLEEP_BETWEEN_REQUESTS = 0.2   # pour éviter surcharge/quota
-
 COUNTRIES = [
     "PT","CH","DE","GB","CZ","FR","DK","LV","RU","HR","SI","GR","IT","RO",
     "LT","SE","ES","BE","NO","FI","PL","NL","BY","LU","UA","AL","IE","AT",
@@ -24,52 +19,50 @@ COUNTRIES = [
 
 TRIMESTERS = ["Q1", "Q2", "Q3", "Q4"]
 
+OUTPUT_DIR = "fasta_data"
+
 # Proxy si nécessaire
 PROXIES = None
 
+TIMEOUT = 15
+
 # ==============================
-# PREPARATION DOSSIER
+# CREATION DOSSIER
 # ==============================
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ==============================
-# EXTRACTION
+# TELECHARGEMENT
 # ==============================
 
-for year in range(START_YEAR, END_YEAR + 1):
-    for q in TRIMESTERS:
-        trimester = f"{year}{q}"
-        output_path = os.path.join(OUTPUT_DIR, f"{trimester}.fasta")
+for country in COUNTRIES:
+    for year in range(START_YEAR, END_YEAR + 1):
+        for q in TRIMESTERS:
 
-        print(f"\nTraitement {trimester}...")
-
-        collected_data = ""
-
-        for country in COUNTRIES:
+            trimester = f"{year}{q}"
             url = f"{BASE_URL}/archived/{DATASET}/{country}/{trimester}"
+
+            print(f"Test {country} {trimester}...")
 
             try:
                 response = requests.get(url, timeout=TIMEOUT, proxies=PROXIES)
 
+                # On vérifie que ça contient des séquences
                 if response.status_code == 200 and response.text.strip():
-                    print(f"  ✓ {country}")
-                    collected_data += response.text.strip() + "\n"
+
+                    filename = f"{country}_{trimester}.fasta"
+                    filepath = os.path.join(OUTPUT_DIR, filename)
+
+                    with open(filepath, "w") as f:
+                        f.write(response.text)
+
+                    print(f"  → Sauvé : {filename}")
 
                 else:
-                    print(f"  - {country} (vide)")
+                    print("  → Pas de données")
 
-            except requests.RequestException:
-                print(f"  x {country} (erreur)")
-
-            time.sleep(SLEEP_BETWEEN_REQUESTS)
-
-        # Sauvegarde si données trouvées
-        if collected_data.strip():
-            with open(output_path, "w") as f:
-                f.write(collected_data)
-            print(f"  → Sauvegardé : {output_path}")
-        else:
-            print("  → Aucune donnée pour ce trimestre (pas de fichier créé)")
+            except requests.RequestException as e:
+                print(f"  → Erreur connexion : {e}")
 
 print("\nExtraction terminée.")
