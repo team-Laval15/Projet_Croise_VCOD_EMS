@@ -24,6 +24,11 @@ def find_mutations(sequence, reference, max_mismatch):
 
     for i in range(len(sequence) - k + 1):
         window = sequence[i:i+k]
+
+        # 🚫 Ignore les fenêtres contenant des tirets
+        if "-" in window:
+            continue
+
         dist = hamming_distance(window, reference)
 
         if dist <= max_mismatch:
@@ -65,9 +70,9 @@ df = pd.DataFrame(
     columns=["mutation", "count"]
 )
 
-print("\nMutations trouvées (≤2 erreurs) :\n")
+print("\nMutations trouvées (≤2 erreurs, sans tirets) :\n")
 print(df)
 
-df.to_csv("gggccc_mutations_2errors.csv", index=False)
+df.to_csv("gggccc_mutations_2errors_no_gaps.csv", index=False)
 
-print("\nRésultats sauvegardés dans gggccc_mutations_2errors.csv")
+print("\nRésultats sauvegardés dans gggccc_mutations_2errors_no_gaps.csv")
