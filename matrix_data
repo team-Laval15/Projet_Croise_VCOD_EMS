@@ -7,46 +7,60 @@ import pandas as pd
 
 BASE_URL = "http://serveur"   # ← à modifier
 DATASET = "sequences"
-YEAR = 1987
 
-# Pays disponibles en Legacy
+START_YEAR = 1980
+END_YEAR = 1995   # inclus
+
 COUNTRIES = [
     "PT","CH","DE","GB","CZ","FR","DK","LV","RU","HR","SI","GR","IT","RO",
     "LT","SE","ES","BE","NO","FI","PL","NL","BY","LU","UA","AL","IE","AT",
     "EE","RS","HU","ME","BG","SK","MD","IS"
 ]
 
-TRIMESTERS = [f"{YEAR}Q1", f"{YEAR}Q2", f"{YEAR}Q3", f"{YEAR}Q4"]
+TRIMESTERS = ["Q1", "Q2", "Q3", "Q4"]
 
-# Si proxy nécessaire :
+# Proxy si nécessaire
 PROXIES = None
-# Exemple :
-# PROXIES = {
-#     "http": "http://user:password@proxy:port",
-#     "https": "http://user:password@proxy:port",
-# }
+
+TIMEOUT = 10
 
 # ==============================
-# TEST DES ROUTES
+# INITIALISATION MATRICE
 # ==============================
 
-matrix = pd.DataFrame(False, index=COUNTRIES, columns=TRIMESTERS)
+columns = [
+    f"{year}{q}"
+    for year in range(START_YEAR, END_YEAR + 1)
+    for q in TRIMESTERS
+]
+
+matrix = pd.DataFrame(False, index=COUNTRIES, columns=columns)
+
+# ==============================
+# TEST DES DONNEES
+# ==============================
 
 for country in COUNTRIES:
-    for trimester in TRIMESTERS:
-        url = f"{BASE_URL}/archived/{DATASET}/{country}/{trimester}"
-        
-        try:
-            response = requests.get(url, timeout=10, proxies=PROXIES)
-            
-            if response.status_code == 200 and response.text.strip():
-                matrix.loc[country, trimester] = True
-                
-        except requests.RequestException:
-            pass  # on laisse False si erreur connexion
+    for year in range(START_YEAR, END_YEAR + 1):
+        for q in TRIMESTERS:
+            trimester = f"{year}{q}"
+            url = f"{BASE_URL}/archived/{DATASET}/{country}/{trimester}"
 
-print("\nMatrice disponibilité des données :\n")
+            try:
+                response = requests.get(url, timeout=TIMEOUT, proxies=PROXIES)
+
+                if response.status_code == 200 and response.text.strip():
+                    matrix.loc[country, trimester] = True
+
+            except requests.RequestException:
+                pass  # on laisse False
+
+print("\nMatrice de disponibilité :\n")
 print(matrix)
 
-# Sauvegarde optionnelle
-matrix.to_csv("availability_matrix.csv")
+# ==============================
+# SAUVEGARDE
+# ==============================
+
+matrix.to_csv("availability_matrix_multi_years.csv")
+print("\nMatrice sauvegardée dans availability_matrix_multi_years.csv")
