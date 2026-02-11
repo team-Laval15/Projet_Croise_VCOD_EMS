@@ -1,0 +1,75 @@
+import requests
+import os
+import time
+
+# ==============================
+# CONFIGURATION
+# ==============================
+
+BASE_URL = "http://serveur"   # ← à modifier
+DATASET = "sequences"
+
+START_YEAR = 1987
+END_YEAR = 1990
+
+OUTPUT_DIR = "fasta_by_trimester"
+TIMEOUT = 15
+SLEEP_BETWEEN_REQUESTS = 0.2   # pour éviter surcharge/quota
+
+COUNTRIES = [
+    "PT","CH","DE","GB","CZ","FR","DK","LV","RU","HR","SI","GR","IT","RO",
+    "LT","SE","ES","BE","NO","FI","PL","NL","BY","LU","UA","AL","IE","AT",
+    "EE","RS","HU","ME","BG","SK","MD","IS"
+]
+
+TRIMESTERS = ["Q1", "Q2", "Q3", "Q4"]
+
+# Proxy si nécessaire
+PROXIES = None
+
+# ==============================
+# PREPARATION DOSSIER
+# ==============================
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# ==============================
+# EXTRACTION
+# ==============================
+
+for year in range(START_YEAR, END_YEAR + 1):
+    for q in TRIMESTERS:
+        trimester = f"{year}{q}"
+        output_path = os.path.join(OUTPUT_DIR, f"{trimester}.fasta")
+
+        print(f"\nTraitement {trimester}...")
+
+        collected_data = ""
+
+        for country in COUNTRIES:
+            url = f"{BASE_URL}/archived/{DATASET}/{country}/{trimester}"
+
+            try:
+                response = requests.get(url, timeout=TIMEOUT, proxies=PROXIES)
+
+                if response.status_code == 200 and response.text.strip():
+                    print(f"  ✓ {country}")
+                    collected_data += response.text.strip() + "\n"
+
+                else:
+                    print(f"  - {country} (vide)")
+
+            except requests.RequestException:
+                print(f"  x {country} (erreur)")
+
+            time.sleep(SLEEP_BETWEEN_REQUESTS)
+
+        # Sauvegarde si données trouvées
+        if collected_data.strip():
+            with open(output_path, "w") as f:
+                f.write(collected_data)
+            print(f"  → Sauvegardé : {output_path}")
+        else:
+            print("  → Aucune donnée pour ce trimestre (pas de fichier créé)")
+
+print("\nExtraction terminée.")
