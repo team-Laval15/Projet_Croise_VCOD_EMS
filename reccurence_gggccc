@@ -70,6 +70,9 @@ df = pd.DataFrame(
     columns=["mutation", "count"]
 )
 
+total_sum = df["count"].sum()
+df.loc[len(df)] = ["TOTAL", total_sum]
+
 print("\nMutations trouvées (≤2 erreurs, sans tirets) :\n")
 print(df)
 
