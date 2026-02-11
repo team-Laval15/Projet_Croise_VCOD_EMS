@@ -1,0 +1,52 @@
+import requests
+import pandas as pd
+
+# ==============================
+# CONFIGURATION
+# ==============================
+
+BASE_URL = "http://serveur"   # ← à modifier
+DATASET = "sequences"
+YEAR = 1987
+
+# Pays disponibles en Legacy
+COUNTRIES = [
+    "PT","CH","DE","GB","CZ","FR","DK","LV","RU","HR","SI","GR","IT","RO",
+    "LT","SE","ES","BE","NO","FI","PL","NL","BY","LU","UA","AL","IE","AT",
+    "EE","RS","HU","ME","BG","SK","MD","IS"
+]
+
+TRIMESTERS = [f"{YEAR}Q1", f"{YEAR}Q2", f"{YEAR}Q3", f"{YEAR}Q4"]
+
+# Si proxy nécessaire :
+PROXIES = None
+# Exemple :
+# PROXIES = {
+#     "http": "http://user:password@proxy:port",
+#     "https": "http://user:password@proxy:port",
+# }
+
+# ==============================
+# TEST DES ROUTES
+# ==============================
+
+matrix = pd.DataFrame(False, index=COUNTRIES, columns=TRIMESTERS)
+
+for country in COUNTRIES:
+    for trimester in TRIMESTERS:
+        url = f"{BASE_URL}/archived/{DATASET}/{country}/{trimester}"
+        
+        try:
+            response = requests.get(url, timeout=10, proxies=PROXIES)
+            
+            if response.status_code == 200 and response.text.strip():
+                matrix.loc[country, trimester] = True
+                
+        except requests.RequestException:
+            pass  # on laisse False si erreur connexion
+
+print("\nMatrice disponibilité des données :\n")
+print(matrix)
+
+# Sauvegarde optionnelle
+matrix.to_csv("availability_matrix.csv")
