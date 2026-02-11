@@ -1,0 +1,103 @@
+
+
+
+
+
+import argparse
+import re
+from pathlib import Path
+
+def is_probable_id(line: str) -> bool:
+    s = line.strip()
+    if not s:
+        return False
+    # pas d'espaces, contient lettres/chiffres/._:- et court (évite de prendre une longue séquence)
+    if " " in s or len(s) > 200:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9_.:-]+(\.[A-Za-z0-9_.:-]+)*", s))
+
+def clean_seq_line(line: str) -> str:
+    # on garde lettres A-Z (maj/min), les codes IUPAC, '-' et '.' ; on supprime espaces/chiffres/autres
+    # accepte aussi lettres accentuées improbable -> supprimées
+    return "".join(re.findall(r"[A-Za-z\-\.]", line))
+
+def wrap_seq(seq: str, width: int) -> str:
+    if width <= 0:
+        return seq
+    return "\n".join(seq[i:i+width] for i in range(0, len(seq), width))
+
+def parse_and_write(input_path: Path, output_path: Path, remove_gaps=False, wrap=80):
+    with input_path.open("r", encoding="utf-8", errors="replace") as f:
+        lines = [ln.rstrip("\n\r") for ln in f]
+
+    records = []
+    cur_id = None
+    cur_seq_parts = []
+
+    i = 0
+    while i < len(lines):
+        ln = lines[i].strip()
+        if not ln:
+            i += 1
+            continue
+
+        if ln.startswith(">"):
+            # header explicite
+            if cur_id is not None:
+                records.append((cur_id, "".join(cur_seq_parts)))
+            cur_id = ln[1:].strip() or f"seq_{len(records)+1}"
+            cur_seq_parts = []
+            i += 1
+            continue
+
+        # si ligne ressemble à un identifiant (ex: U58801.23.7.1987.FR) et la ligne suivante ressemble à une séquence
+        next_ln = lines[i+1].strip() if i+1 < len(lines) else ""
+        if is_probable_id(ln) and (re.search(r"[A-Za-z\-\.]", next_ln)):
+            if cur_id is not None:
+                records.append((cur_id, "".join(cur_seq_parts)))
+            cur_id = ln
+            cur_seq_parts = []
+            i += 1
+            continue
+
+        # sinon on suppose que c'est une ligne de séquence (ou partie)
+        cleaned = clean_seq_line(lines[i])
+        if cleaned:
+            cur_seq_parts.append(cleaned)
+        else:
+            # si ligne ne contient rien d'utile on l'ignore
+            pass
+        i += 1
+
+    # append last
+    if cur_id is not None:
+        records.append((cur_id, "".join(cur_seq_parts)))
+
+    # si aucun header trouvé mais du contenu, on crée des ids automatiques
+    if not records and lines:
+        seq_all = "".join(clean_seq_line(ln) for ln in lines)
+        records = [("seq_1", seq_all)]
+
+    # write FASTA
+    with output_path.open("w", encoding="utf-8") as out:
+        for idx, (rid, rseq) in enumerate(records, start=1):
+            seq = rseq.replace(".", "")  # les '.' ponctuels sont souvent non-informats ; on les retire
+            if remove_gaps:
+                seq = seq.replace("-", "")
+            seq = seq.upper()
+            header = rid.strip() or f"seq_{idx}"
+            out.write(f">{header}\n")
+            out.write(wrap_seq(seq, wrap))
+            out.write("\n")
+
+    print(f"Écrit {len(records)} enregistrement(s) dans {output_path}")
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser(description="Extraire séquences en FASTA depuis un fichier brut aligné/annoté.")
+    p.add_argument("-i", "--input", required=True, help="Fichier d'entrée (texte brut).")
+    p.add_argument("-o", "--output", required=True, help="Fichier FASTA de sortie.")
+    p.add_argument("--remove-gaps", action="store_true", help="Retirer les '-' des séquences.")
+    p.add_argument("--wrap", type=int, default=80, help="Wrap width (0 = no wrap). Default 80.")
+    args = p.parse_args()
+
+    parse_and_write(Path(args.input), Path(args.output), remove_gaps=args.remove_gaps, wrap=args.wrap)
