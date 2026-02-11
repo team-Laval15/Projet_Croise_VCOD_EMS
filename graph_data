@@ -1,0 +1,35 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Charger la matrice
+matrix = pd.read_csv("availability_matrix_multi_years.csv", index_col=0)
+
+# Convertir True/False en 1/0
+matrix_numeric = matrix.astype(int)
+
+#graph1
+
+# Somme par pays
+data_per_country = matrix_numeric.sum(axis=1)
+
+plt.figure()
+plt.bar(data_per_country.index, data_per_country.values)
+plt.xticks(rotation=90)
+plt.xlabel("Pays")
+plt.ylabel("Nombre de trimestres avec données")
+plt.title("Répartition des données par pays")
+plt.tight_layout()
+plt.show()
+
+#graph 2
+# Somme par trimestre
+data_per_trimester = matrix_numeric.sum(axis=0)
+
+plt.figure()
+plt.plot(data_per_trimester.index, data_per_trimester.values)
+plt.xticks(rotation=90)
+plt.xlabel("Trimestre")
+plt.ylabel("Nombre de pays avec données")
+plt.title("Répartition des données par trimestre")
+plt.tight_layout()
+plt.show()
