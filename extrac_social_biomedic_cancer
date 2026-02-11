@@ -1,0 +1,85 @@
+import requests
+import os
+import pandas as pd
+from io import StringIO
+
+# ==============================
+# CONFIGURATION
+# ==============================
+
+BASE_URL = "http://serveur"  # ← à modifier
+
+DATASETS = ["cancer", "biomedical", "social"]  # datasets à extraire
+
+START_YEAR = 1987
+END_YEAR = 1987
+
+COUNTRIES = [
+    "PT","CH","DE","GB","CZ","FR","DK","LV","RU","HR","SI","GR","IT","RO",
+    "LT","SE","ES","BE","NO","FI","PL","NL","BY","LU","UA","AL","IE","AT",
+    "EE","RS","HU","ME","BG","SK","MD","IS"
+]
+
+TRIMESTERS = ["Q1", "Q2", "Q3", "Q4"]
+
+OUTPUT_DIR = "csv_downloads"  # dossier principal
+
+# Proxy si nécessaire
+PROXIES = None
+TIMEOUT = 15
+
+# ==============================
+# CREATION DOSSIER PRINCIPAL
+# ==============================
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+print("Les fichiers seront enregistrés dans :", os.path.abspath(OUTPUT_DIR))
+print()
+
+# ==============================
+# TELECHARGEMENT
+# ==============================
+
+for dataset in DATASETS:
+    dataset_dir = os.path.join(OUTPUT_DIR, dataset)
+    os.makedirs(dataset_dir, exist_ok=True)
+
+    for country in COUNTRIES:
+        country_dir = os.path.join(dataset_dir, country)
+        os.makedirs(country_dir, exist_ok=True)
+
+        for year in range(START_YEAR, END_YEAR + 1):
+            for q in TRIMESTERS:
+
+                trimester = f"{year}{q}"
+                url = f"{BASE_URL}/archived/{dataset}/{country}/{trimester}"
+
+                try:
+                    response = requests.get(url, timeout=TIMEOUT, proxies=PROXIES)
+
+                    # Vérifie qu'il y a du contenu réel
+                    if response.status_code == 200 and response.text.strip():
+
+                        # Essaie de lire en CSV (certains datasets peuvent être délimités par des virgules)
+                        try:
+                            df = pd.read_csv(StringIO(response.text))
+                        except pd.errors.ParserError:
+                            # Si ça ne fonctionne pas, on sauvegarde quand même en brut
+                            filepath = os.path.join(country_dir, f"{country}_{trimester}.csv")
+                            with open(filepath, "w", encoding="utf-8") as f:
+                                f.write(response.text)
+                            print(f"✓ Sauvegardé (brut) : {dataset}/{country}_{trimester}.csv")
+                            continue
+
+                        # Sauvegarde CSV
+                        filepath = os.path.join(country_dir, f"{country}_{trimester}.csv")
+                        df.to_csv(filepath, index=False)
+                        print(f"✓ Sauvegardé : {dataset}/{country}_{trimester}.csv")
+
+                    else:
+                        print(f"- Pas de données : {dataset} {country} {trimester}")
+
+                except requests.RequestException as e:
+                    print(f"Erreur : {dataset} {country} {trimester} → {e}")
+
+print("\nTéléchargement terminé.")
