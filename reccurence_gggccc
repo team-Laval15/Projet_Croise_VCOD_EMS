@@ -6,7 +6,7 @@ from collections import defaultdict
 # CONFIGURATION
 # ==============================
 
-ROOT_DIR = "fasta_downloads"
+ROOT_DIR = "fasta_data"
 REFERENCE = "gggccc"
 MAX_MISMATCH = 2
 
@@ -25,7 +25,7 @@ def find_mutations(sequence, reference, max_mismatch):
     for i in range(len(sequence) - k + 1):
         window = sequence[i:i+k]
 
-        # 🚫 Ignore les fenêtres contenant des tirets
+        # Ignore les fenêtres contenant des tirets
         if "-" in window:
             continue
 
