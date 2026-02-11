@@ -1,0 +1,77 @@
+import requests
+
+# ==============================
+# CONFIGURATION
+# ==============================
+URL = "https://ton-serveur.com/endpoint"   # ← Remplace par ton URL
+OUTPUT_FILE = "sequences_nettoyees.fasta"
+
+# ==============================
+# TELECHARGEMENT DES DONNEES
+# ==============================
+response = requests.get(URL)
+
+if response.status_code != 200:
+    raise Exception(f"Erreur GET : {response.status_code}")
+
+raw_data = response.text
+
+
+# ==============================
+# PARSING DES SEQUENCES
+# ==============================
+def parse_sequences(text):
+    sequences = {}
+    current_id = None
+    current_seq = []
+
+    for line in text.splitlines():
+        line = line.strip()
+
+        # Ligne d'identifiant
+        if line.startswith(">"):
+            if current_id:
+                sequences[current_id] = "".join(current_seq)
+            current_id = line[1:]  # enlever le >
+            current_seq = []
+
+        # Ignorer les lignes de séparation (pleines de -)
+        elif set(line) == {"-"}:
+            continue
+
+        # Ligne de séquence
+        else:
+            current_seq.append(line)
+
+    # Sauvegarde dernière séquence
+    if current_id:
+        sequences[current_id] = "".join(current_seq)
+
+    return sequences
+
+
+sequences = parse_sequences(raw_data)
+
+
+# ==============================
+# NETTOYAGE DES SEQUENCES
+# ==============================
+def clean_sequence(seq):
+    return seq.replace("-", "").lower()
+
+
+cleaned_sequences = {
+    seq_id: clean_sequence(seq)
+    for seq_id, seq in sequences.items()
+}
+
+
+# ==============================
+# SAUVEGARDE EN FASTA
+# ==============================
+with open(OUTPUT_FILE, "w") as f:
+    for seq_id, seq in cleaned_sequences.items():
+        f.write(f">{seq_id}\n")
+        f.write(seq + "\n")
+
+print(f"{len(cleaned_sequences)} séquences sauvegardées dans {OUTPUT_FILE}")
