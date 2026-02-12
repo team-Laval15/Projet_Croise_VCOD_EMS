@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 
 # ==============================
-# Liste des fichiers CSV
+# LISTE DES CSV
 # ==============================
 csv_files = [
     "gggccc_mutations_2errors.csv",
@@ -15,42 +15,34 @@ csv_files = [
 ]
 
 # ==============================
-# Dossier de sauvegarde des graphiques
+# EXTRACTION DES TOTAUX
 # ==============================
-output_dir = "graphs_mutations"
-os.makedirs(output_dir, exist_ok=True)
+totals = []
+patterns = []
 
-# ==============================
-# Boucle sur chaque CSV
-# ==============================
-for csv_file in csv_files:
-    if not os.path.exists(csv_file):
-        print(f"Fichier non trouvé : {csv_file}")
+for file in csv_files:
+    if not os.path.exists(file):
+        print(f"Fichier manquant : {file}")
+        totals.append(0)
+        patterns.append(file.split("_")[0])
         continue
 
-    df = pd.read_csv(csv_file)
-
+    df = pd.read_csv(file)
+    
     # Extraire la ligne TOTAL
     total_row = df[df["mutation"].str.upper() == "TOTAL"]
 
     if total_row.empty:
-        print(f"Aucun total trouvé dans {csv_file}")
-        continue
+        total = 0
+    else:
+        total = int(total_row["count"].values[0])
 
-    total_count = int(total_row["count"].values[0])
+    totals.append(total)
+    patterns.append(file.split("_")[0])  # nom du motif avant "_mutations"
 
-    # ==============================
-    # Création graphique
-    # ==============================
-    plt.figure(figsize=(6,4))
-    plt.bar([csv_file.replace("_mutations_2errors.csv","")], [total_count], color='skyblue')
-    plt.ylabel("Nombre total d'occurrences")
-    plt.title(f"Occurrences du motif {csv_file.replace('_mutations_2errors.csv','')}")
-    plt.ylim(0, total_count*1.1)
-
-    # Sauvegarde
-    output_path = os.path.join(output_dir, csv_file.replace(".csv", ".png"))
-    plt.savefig(output_path, bbox_inches='tight')
-    plt.close()
-
-    print(f"Graphique sauvegardé : {output_path}")
+# ==============================
+# CREATION DU GRAPHIQUE
+# ==============================
+plt.figure(figsize=(10,6))
+plt.bar(patterns, totals, color='skyblue')
+plt.ylabel("Total o
