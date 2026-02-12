@@ -4,7 +4,7 @@ from pipelines.merge_fasta import merge_directories
 from pipelines.utils import ensure_dir
 
 # ==============================
-# 🔹 Paramètres à renseigner
+# Paramètres à renseigner
 # ==============================
 
 SERVER = input("Serveur (ex: http://ton_serveur) : ").strip()
@@ -28,7 +28,7 @@ ensure_dir(SPLIT_DIR)
 ensure_dir(MERGE_DIR)
 
 # ==============================
-# 🔹 Pipeline
+# Pipeline
 # ==============================
 
 for country in COUNTRIES:
