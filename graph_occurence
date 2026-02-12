@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 
 # ==============================
-# LISTE DES CSV
+# Liste des fichiers CSV
 # ==============================
 csv_files = [
     "gggccc_mutations_2errors.csv",
@@ -14,12 +14,14 @@ csv_files = [
     "gtacacgt_mutations_2errors.csv"
 ]
 
-# Dossier pour enregistrer les graphiques
-output_dir = "mutation_graphs"
+# ==============================
+# Dossier de sauvegarde des graphiques
+# ==============================
+output_dir = "graphs_mutations"
 os.makedirs(output_dir, exist_ok=True)
 
 # ==============================
-# BOUCLE SUR CHAQUE CSV
+# Boucle sur chaque CSV
 # ==============================
 for csv_file in csv_files:
     if not os.path.exists(csv_file):
@@ -28,27 +30,27 @@ for csv_file in csv_files:
 
     df = pd.read_csv(csv_file)
 
-    # Supprimer la ligne TOTAL si elle existe
-    df = df[df["mutation"].str.upper() != "TOTAL"]
+    # Extraire la ligne TOTAL
+    total_row = df[df["mutation"].str.upper() == "TOTAL"]
 
-    if df.empty:
-        print(f"Aucun motif détecté dans {csv_file}")
+    if total_row.empty:
+        print(f"Aucun total trouvé dans {csv_file}")
         continue
 
-    # Créer le graphique
-    plt.figure(figsize=(10, 6))
-    plt.bar(df["mutation"], df["count"], color="skyblue")
-    plt.xlabel("Mutation")
-    plt.ylabel("Occurrences")
-    plt.title(f"Occurrences des mutations dans {csv_file}")
-    plt.xticks(rotation=90)
-    plt.tight_layout()
+    total_count = int(total_row["count"].values[0])
 
-    # Sauvegarder
-    png_file = os.path.join(output_dir, csv_file.replace(".csv", ".png"))
-    plt.savefig(png_file)
+    # ==============================
+    # Création graphique
+    # ==============================
+    plt.figure(figsize=(6,4))
+    plt.bar([csv_file.replace("_mutations_2errors.csv","")], [total_count], color='skyblue')
+    plt.ylabel("Nombre total d'occurrences")
+    plt.title(f"Occurrences du motif {csv_file.replace('_mutations_2errors.csv','')}")
+    plt.ylim(0, total_count*1.1)
+
+    # Sauvegarde
+    output_path = os.path.join(output_dir, csv_file.replace(".csv", ".png"))
+    plt.savefig(output_path, bbox_inches='tight')
     plt.close()
 
-    print(f"Graphique sauvegardé : {png_file}")
-
-print("\nTous les graphiques générés dans le dossier 'mutation_graphs'")
+    print(f"Graphique sauvegardé : {output_path}")
