@@ -1,0 +1,57 @@
+import pandas as pd
+import os
+
+# ==============================
+# CONFIGURATION
+# ==============================
+
+INPUT_DIR = "mutations_csv"      # dossier avec les CSV existants
+OUTPUT_DIR = "mutations_filtered"  # dossier où seront écrits les CSV filtrés
+
+PATTERNS = [
+    "gggccc",
+    "acctcca",
+    "tttttta",
+    "gggacggg",
+    "atatatat",
+    "gtacacgt"
+]
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# ==============================
+# FONCTION DE FILTRAGE
+# ==============================
+
+def filter_mutations(csv_path, output_path):
+    df = pd.read_csv(csv_path)
+
+    # Supprimer les lignes contenant des tirets
+    df = df[~df["mutation"].str.contains("-")]
+
+    # Supprimer les lignes où le premier caractère est une erreur (non présent dans le motif)
+    motif_len = len(os.path.splitext(os.path.basename(csv_path))[0])
+    pattern = os.path.splitext(os.path.basename(csv_path))[0]
+
+    def first_char_valid(row):
+        return row["mutation"][0] == pattern[0]
+
+    df = df[df.apply(first_char_valid, axis=1)]
+
+    # Réécrire CSV filtré
+    df.to_csv(output_path, index=False)
+    print(f"CSV filtré sauvegardé : {output_path}")
+
+
+# ==============================
+# TRAITEMENT
+# ==============================
+
+for pattern in PATTERNS:
+    input_file = os.path.join(INPUT_DIR, f"{pattern}.csv")
+    output_file = os.path.join(OUTPUT_DIR, f"{pattern}_filtered.csv")
+
+    if os.path.exists(input_file):
+        filter_mutations(input_file, output_file)
+    else:
+        print(f"⚠️ Fichier non trouvé : {input_file}")
