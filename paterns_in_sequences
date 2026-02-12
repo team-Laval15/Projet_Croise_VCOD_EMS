@@ -31,22 +31,7 @@ def read_fasta(filepath):
     return sequences
 
 # ==============================
-# FONCTION POUR COMPTER LES OCCURRENCES D'UN MOTIF
-# ==============================
-
-def count_pattern(sequence, pattern):
-    count = 0
-    start = 0
-    while True:
-        idx = sequence.find(pattern, start)
-        if idx == -1:
-            break
-        count += 1
-        start = idx + 1  # pour inclure les chevauchements
-    return count
-
-# ==============================
-# PARCOURS DES FICHIERS ET COMPTAGE DES PATTERNS
+# PARCOURS DES FICHIERS ET COMPTE DES PATTERNS
 # ==============================
 
 results = []
@@ -58,16 +43,23 @@ for root, dirs, files in os.walk(ROOT_DIR):
             sequences = read_fasta(filepath)
 
             for name, seq in sequences.items():
+                # Ignore les séquences vides
                 if not seq:
                     continue
 
                 row = {"sequence_name": name}
                 for pattern in PATTERNS:
-                    row[pattern] = count_pattern(seq, pattern)
+                    # Compte le nombre d'occurrences du motif (chevauchantes possibles)
+                    count = 0
+                    pattern_len = len(pattern)
+                    for i in range(len(seq) - pattern_len + 1):
+                        if seq[i:i+pattern_len] == pattern:
+                            count += 1
+                    row[pattern] = count
                 results.append(row)
 
 # ==============================
-# CREATION DATAFRAME ET TRI
+# CREATION DATAFRAME ET SAUVEGARDE
 # ==============================
 
 df = pd.DataFrame(results)
@@ -75,9 +67,5 @@ df = pd.DataFrame(results)
 # Mettre les colonnes dans l'ordre souhaité
 df = df[["sequence_name"] + PATTERNS]
 
-# Trier par sequence_name (alphabetiquement)
-df = df.sort_values("sequence_name").reset_index(drop=True)
-
-# Sauvegarde CSV
 df.to_csv("sequence_patterns_counts.csv", index=False)
 print("CSV sauvegardé : sequence_patterns_counts.csv")
