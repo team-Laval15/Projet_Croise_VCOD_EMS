@@ -1,34 +1,72 @@
-# pipelines/fetch_data.py
-
 import requests
 import os
 
-def fetch_legacy(server, dataset, country, year, quarter, output_dir):
-    """
-    Télécharge les données via l'API legacy :
-    {server}/archived/{dataset}/{country}/{year}Q{quarter}
-    """
+# ==============================
+# CONFIGURATION
+# ==============================
 
-    trimester = f"{year}Q{quarter}"
-    url = f"{server}/archived/{dataset}/{country}/{trimester}"
+BASE_URL = "http://172.22.215.130:8080"   
+DATASET = "sequences"
+
+START_YEAR = 1970
+END_YEAR = 2025
+
+COUNTRIES = [
+    "PT","CH","DE","GB","CZ","FR","DK","LV","RU","HR","SI","GR","IT","RO",
+    "LT","SE","ES","BE","NO","FI","PL","NL","BY","LU","UA","AL","IE","AT",
+    "EE","RS","HU","ME","BG","SK","MD","IS"
+]
+
+TRIMESTERS = ["Q1", "Q2", "Q3", "Q4"]
+
+OUTPUT_DIR = "fasta_data"  # dossier de sortie
+FILE_EXTENSION = "fasta"   # ← ici tu choisis "fasta", "csv", etc.
+
+TIMEOUT = 15
+
+# ==============================
+# CREATION DOSSIER
+# ==============================
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# ==============================
+# FONCTION DE TELECHARGEMENT
+# ==============================
+
+def download_dataset(dataset, country, year, trimester, ext="fasta"):
+    url = f"{BASE_URL}/archived/{dataset}/{country}/{year}{trimester}"
+    print(f"Test {country} {year}{trimester}...")
 
     try:
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, timeout=TIMEOUT)
 
+        # Vérifie que la réponse contient quelque chose
         if response.status_code == 200 and response.text.strip():
-            filename = f"{country}_{trimester}.fasta"
-            path = os.path.join(output_dir, filename)
+            filename = f"{country}_{year}{trimester}.{ext}"
+            filepath = os.path.join(OUTPUT_DIR, filename)
 
-            with open(path, "w", encoding="utf-8") as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 f.write(response.text)
 
-            print(f"✔ Téléchargé : {filename}")
-            return path
+            print(f"  → Sauvé : {filename}")
+            return filepath
 
         else:
-            print(f"✘ Pas de données : {country} {trimester}")
+            print("  → Pas de données")
             return None
 
-    except requests.exceptions.RequestException as e:
-        print(f"⚠ Erreur connexion {country} {trimester} : {e}")
+    except requests.RequestException as e:
+        print(f"  → Erreur connexion : {e}")
         return None
+
+# ==============================
+# BOUCLE PRINCIPALE
+# ==============================
+
+for country in COUNTRIES:
+    for year in range(START_YEAR, END_YEAR + 1):
+        for trimester in TRIMESTERS:
+            download_dataset(DATASET, country, year, trimester, FILE_EXTENSION)
+
+print("\nExtraction terminée.")
