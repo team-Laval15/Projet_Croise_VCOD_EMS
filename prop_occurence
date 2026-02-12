@@ -1,10 +1,6 @@
 import pandas as pd
 from collections import defaultdict
 
-# ==============================
-# TABLE IUPAC (pondération égale)
-# ==============================
-
 IUPAC = {
     "A": ["A"],
     "C": ["C"],
@@ -24,23 +20,19 @@ IUPAC = {
     "N": ["A", "C", "G", "T"],
 }
 
-# ==============================
-# CHARGEMENT CSV
-# ==============================
+df = pd.read_csv("gggccc_mutations_2errors_IUPAC.csv")
 
-df = pd.read_csv("gggccc_mutations_2errors_no_gaps.csv")
+# Supprimer TOTAL proprement
+df = df[df["mutation"].str.upper() != "TOTAL"]
 
-# Supprimer la ligne TOTAL
-df = df[df["mutation"] != "TOTAL"]
-
-# ==============================
-# COMPTAGE PONDÉRÉ
-# ==============================
+if df.empty:
+    print("⚠️ Aucun motif détecté dans le CSV.")
+    exit()
 
 letter_counts = defaultdict(float)
 
 for _, row in df.iterrows():
-    mutation = row["mutation"]
+    mutation = str(row["mutation"]).upper()
     count = row["count"]
 
     for letter in mutation:
@@ -50,36 +42,19 @@ for _, row in df.iterrows():
             for base in bases:
                 letter_counts[base] += weight
 
-# ==============================
-# CALCUL PROPORTIONS
-# ==============================
-
 total_letters = sum(letter_counts.values())
+
+if total_letters == 0:
+    print("⚠️ Aucune lettre valide trouvée.")
+    exit()
 
 proportions = {
     base: letter_counts[base] / total_letters
     for base in ["A", "C", "G", "T"]
 }
 
-# ==============================
-# AFFICHAGE
-# ==============================
-
 print("\nTotal lettres pondérées :", total_letters)
 print("\nProportions corrigées IUPAC :\n")
 
 for base, prop in proportions.items():
     print(f"{base} : {prop:.4f}")
-
-# ==============================
-# SAUVEGARDE
-# ==============================
-
-result_df = pd.DataFrame({
-    "base": proportions.keys(),
-    "proportion": proportions.values()
-})
-
-result_df.to_csv("letter_proportions_IUPAC_weighted.csv", index=False)
-
-print("\nRésultats sauvegardés dans letter_proportions_IUPAC_weighted.csv")
