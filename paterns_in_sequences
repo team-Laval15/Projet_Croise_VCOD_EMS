@@ -31,22 +31,22 @@ def read_fasta(filepath):
     return sequences
 
 # ==============================
-# FONCTION POUR COMPTER LES OCCURRENCES
+# FONCTION POUR COMPTER LES OCCURRENCES D'UN MOTIF
 # ==============================
 
-def count_pattern(seq, pattern):
+def count_pattern(sequence, pattern):
     count = 0
     start = 0
     while True:
-        pos = seq.find(pattern, start)
-        if pos == -1:
+        idx = sequence.find(pattern, start)
+        if idx == -1:
             break
         count += 1
-        start = pos + 1  # permet de compter les occurrences chevauchantes
+        start = idx + 1  # pour inclure les chevauchements
     return count
 
 # ==============================
-# PARCOURS DES FICHIERS ET CHECK PATTERNS
+# PARCOURS DES FICHIERS ET COMPTAGE DES PATTERNS
 # ==============================
 
 results = []
@@ -57,21 +57,13 @@ for root, dirs, files in os.walk(ROOT_DIR):
             filepath = os.path.join(root, file)
             sequences = read_fasta(filepath)
 
-            # Essayer de récupérer le pays à partir du nom de fichier
-            country = os.path.basename(file).split("_")[0]  # exemple : FR_1987Q1.fasta
-
             for name, seq in sequences.items():
                 if not seq:
                     continue
 
-                row = {
-                    "sequence_name": name,
-                    "country": country
-                }
-
+                row = {"sequence_name": name}
                 for pattern in PATTERNS:
                     row[pattern] = count_pattern(seq, pattern)
-
                 results.append(row)
 
 # ==============================
@@ -80,11 +72,12 @@ for root, dirs, files in os.walk(ROOT_DIR):
 
 df = pd.DataFrame(results)
 
-# Trier par pays alphabétiquement, puis par nom de séquence
-df = df.sort_values(by=["country", "sequence_name"])
+# Mettre les colonnes dans l'ordre souhaité
+df = df[["sequence_name"] + PATTERNS]
 
-# Colonnes finales
-df = df[["country", "sequence_name"] + PATTERNS]
+# Trier par sequence_name (alphabetiquement)
+df = df.sort_values("sequence_name").reset_index(drop=True)
 
+# Sauvegarde CSV
 df.to_csv("sequence_patterns_counts.csv", index=False)
 print("CSV sauvegardé : sequence_patterns_counts.csv")
