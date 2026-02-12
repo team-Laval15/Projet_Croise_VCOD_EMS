@@ -1,0 +1,89 @@
+import os
+import pandas as pd
+from collections import defaultdict
+
+# ==============================
+# CONFIGURATION
+# ==============================
+
+ROOT_DIR = "fasta_downloads"
+
+PATTERNS = [
+    "gggccc",
+    "acctcca",
+    "tttttta",
+    "gggacggg",
+    "atatatat",
+    "gtacacgt"
+]
+
+MAX_MISMATCH = 2
+
+# ==============================
+# FONCTIONS
+# ==============================
+
+def hamming_distance(s1, s2):
+    """Distance de Hamming entre deux séquences de même longueur"""
+    return sum(c1 != c2 for c1, c2 in zip(s1, s2))
+
+
+def count_pattern_in_sequence(sequence, pattern, max_mismatch):
+    """Compte toutes les occurrences d'un motif dans une séquence avec erreurs autorisées"""
+    counts = defaultdict(int)
+    k = len(pattern)
+
+    for i in range(len(sequence) - k + 1):
+        window = sequence[i:i+k]
+
+        # ignore les gaps
+        if "-" in window:
+            continue
+
+        if hamming_distance(window, pattern) <= max_mismatch:
+            counts[window] += 1
+
+    return counts
+
+# ==============================
+# PARCOURS DES FICHIERS
+# ==============================
+
+# Dictionnaire pour stocker résultats par motif
+results = {pattern: defaultdict(int) for pattern in PATTERNS}
+
+for root, dirs, files in os.walk(ROOT_DIR):
+    for file in files:
+        if file.endswith(".fasta"):
+            filepath = os.path.join(root, file)
+
+            # Lecture de la séquence complète
+            with open(filepath, "r", encoding="utf-8") as f:
+                sequence = "".join(line.strip().lower() for line in f if not line.startswith(">"))
+
+            # Compter chaque motif
+            for pattern in PATTERNS:
+                pattern_counts = count_pattern_in_sequence(sequence, pattern, MAX_MISMATCH)
+                for mut, count in pattern_counts.items():
+                    results[pattern][mut] += count
+
+# ==============================
+# CREATION DU FICHIER EXCEL
+# ==============================
+
+with pd.ExcelWriter("patterns_counts.xlsx") as writer:
+    for pattern, counts_dict in results.items():
+        df = pd.DataFrame(
+            sorted(counts_dict.items(), key=lambda x: x[1], reverse=True),
+            columns=["mutation", "count"]
+        )
+
+        # ajouter ligne TOTAL
+        total_sum = df["count"].sum() if not df.empty else 0
+        df.loc[len(df)] = ["TOTAL", total_sum]
+
+        # sauvegarde feuille
+        sheet_name = pattern[:31]  # Excel sheet max length = 31
+        df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+print("✅ Comptage terminé. Résultats sauvegardés dans patterns_counts.xlsx")
