@@ -1,0 +1,98 @@
+import os
+import pandas as pd
+from collections import defaultdict
+
+# ==============================
+# CONFIGURATION
+# ==============================
+
+FASTA_DIR = "fasta_data_v1"
+PATTERNS_FILE = "patterns_mutations_merged.csv"
+OUTPUT_FILE = "pattern_mutations_counts.csv"
+
+# ==============================
+# LECTURE DES PATTERNS FILTRÉS
+# ==============================
+
+# On s'attend à un CSV : colonnes = pattern_base, mutation
+# Exemple : pattern_base,mutation
+#          gggccc,gggacc
+#          gggccc,gggccc
+patterns_df = pd.read_csv(PATTERNS_FILE)
+
+# On crée un dictionnaire : {pattern_base: [mut1, mut2, ...]}
+patterns_dict = patterns_df.groupby("pattern_base")["mutation"].apply(list).to_dict()
+
+# ==============================
+# FONCTION POUR LIRE LES FICHIERS FASTA
+# ==============================
+
+def read_fasta(filepath):
+    sequences = {}
+    with open(filepath, "r", encoding="utf-8") as f:
+        header = None
+        seq = ""
+        for line in f:
+            line = line.strip()
+            if line.startswith(">"):
+                if header:
+                    sequences[header] = seq.lower()
+                header = line[1:]  # retire le >
+                seq = ""
+            else:
+                seq += line.lower()
+        if header:
+            sequences[header] = seq.lower()
+    return sequences
+
+# ==============================
+# FONCTION POUR COMPTER LES MUTATIONS
+# ==============================
+
+def count_mutations(sequence, mutations):
+    """
+    Compte le nombre de fois que chaque mutation est présente dans la séquence
+    """
+    counts = defaultdict(int)
+    for mut in mutations:
+        mut_len = len(mut)
+        for i in range(len(sequence) - mut_len + 1):
+            window = sequence[i:i+mut_len]
+            if "-" in window:
+                continue  # on ignore les tirets
+            if window == mut:
+                counts[mut] += 1
+    return counts
+
+# ==============================
+# PARCOURS DES FICHIERS ET COMPTAGE
+# ==============================
+
+results = []
+
+for root, dirs, files in os.walk(FASTA_DIR):
+    for file in files:
+        if file.endswith(".fasta"):
+            filepath = os.path.join(root, file)
+            sequences = read_fasta(filepath)
+
+            for seq_name, seq in sequences.items():
+                row = {"sequence_name": seq_name}
+
+                for pattern_base, mutations in patterns_dict.items():
+                    mut_counts = count_mutations(seq, mutations)
+                    row[pattern_base] = sum(mut_counts.values())  # total pour ce pattern
+
+                results.append(row)
+
+# ==============================
+# CREATION DATAFRAME ET SAUVEGARDE
+# ==============================
+
+df = pd.DataFrame(results)
+
+# Colonnes dans l'ordre
+df = df[["sequence_name"] + list(patterns_dict.keys())]
+
+df.to_csv(OUTPUT_FILE, index=False)
+print(f"CSV sauvegardé : {OUTPUT_FILE}")
