@@ -1,57 +1,97 @@
 import os
+from collections import defaultdict
 
 # ==============================
 # CONFIGURATION
 # ==============================
 
-INPUT_DIR = "fasta_input"          # dossier contenant tes fichiers fasta
-OUTPUT_DIR = "fasta_split"       # dossier de sortie
+INPUT_DIR = "fasta_input"     # dossier contenant les fichiers .fasta d'origine
+OUTPUT_DIR = "fasta_split"   # dossier où seront créés les nouveaux fichiers
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ==============================
-# FONCTION POUR LIRE FASTA
+# FONCTION POUR DÉTERMINER LE TRIMESTRE
 # ==============================
 
-def read_fasta(filepath):
-    sequences = []
-    with open(filepath, "r", encoding="utf-8") as f:
-        seq_name = None
-        seq = ""
-        for line in f:
-            line = line.strip()
-            if line.startswith(">"):
-                if seq_name is not None:
-                    sequences.append((seq_name, seq))
-                seq_name = line[1:]   # retire le >
-                seq = ""
-            else:
-                seq += line
-        if seq_name is not None:
-            sequences.append((seq_name, seq))
-    return sequences
-
+def get_trimester(month):
+    month = int(month)
+    if 1 <= month <= 3:
+        return 1
+    elif 4 <= month <= 6:
+        return 2
+    elif 7 <= month <= 9:
+        return 3
+    elif 10 <= month <= 12:
+        return 4
+    else:
+        return None
 
 # ==============================
-# SPLIT DES FICHIERS
+# LECTURE DES FICHIERS ET REGROUPEMENT
 # ==============================
+
+grouped_sequences = defaultdict(list)
 
 for file in os.listdir(INPUT_DIR):
     if file.endswith(".fasta"):
         filepath = os.path.join(INPUT_DIR, file)
-        sequences = read_fasta(filepath)
 
-        base_name = os.path.splitext(file)[0]
+        with open(filepath, "r", encoding="utf-8") as f:
+            current_header = None
+            current_sequence = ""
 
-        for i, (name, seq) in enumerate(sequences):
-            # Nettoyage du nom pour éviter problèmes fichiers
-            safe_name = name.replace("/", "_").replace(" ", "_")
+            for line in f:
+                line = line.strip()
 
-            new_filename = f"{base_name}_{safe_name}.fasta"
-            output_path = os.path.join(OUTPUT_DIR, new_filename)
+                if line.startswith(">"):
+                    # Sauvegarder la séquence précédente
+                    if current_header is not None:
+                        grouped_sequences[key].append(
+                            (current_header, current_sequence)
+                        )
 
-            with open(output_path, "w", encoding="utf-8") as out:
-                out.write(f">{name}\n")
-                out.write(seq + "\n")
+                    current_header = line
+                    current_sequence = ""
 
-print("Extraction terminée")
+                    # Extraction des infos
+                    header_clean = line[1:]  # retire le >
+                    parts = header_clean.split(".")
+
+                    if len(parts) >= 5:
+                        day = parts[1]
+                        month = parts[2]
+                        year = parts[3]
+                        country = parts[4]
+
+                        trimester = get_trimester(month)
+                        if trimester is None:
+                            continue
+
+                        key = f"{country}_{year}Q{trimester}"
+                    else:
+                        key = None
+
+                else:
+                    current_sequence += line
+
+            # Sauvegarde dernière séquence
+            if current_header is not None and key is not None:
+                grouped_sequences[key].append(
+                    (current_header, current_sequence)
+                )
+
+# ==============================
+# ÉCRITURE DES NOUVEAUX FICHIERS
+# ==============================
+
+for key, sequences in grouped_sequences.items():
+    output_path = os.path.join(OUTPUT_DIR, f"{key}.fasta")
+
+    with open(output_path, "w", encoding="utf-8") as out:
+        for header, sequence in sequences:
+            out.write(f"{header}\n")
+            out.write(f"{sequence}\n")
+
+print("Extraction terminée.")
+print(f"Fichiers créés dans : {OUTPUT_DIR}")
