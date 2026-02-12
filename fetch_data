@@ -1,0 +1,22 @@
+# pipelines/fetch_data.py
+
+import requests
+import os
+
+def fetch_legacy(server, dataset, country, year, quarter, output_dir):
+    url = f"{server}/archived/{dataset}/{country}/{year}Q{quarter}"
+
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        filename = f"{country}_{year}Q{quarter}.fasta"
+        path = os.path.join(output_dir, filename)
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(response.text)
+
+        print(f"Téléchargé : {filename}")
+        return path
+    else:
+        print(f"Aucune donnée : {country} {year}Q{quarter}")
+        return None
