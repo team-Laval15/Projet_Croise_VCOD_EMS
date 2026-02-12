@@ -1,0 +1,58 @@
+import pandas as pd
+from collections import defaultdict
+
+# ==============================
+# CHARGEMENT CSV
+# ==============================
+
+df = pd.read_csv("gggccc_mutations_2errors_no_gaps.csv")
+
+# Supprimer la ligne TOTAL si elle existe
+df = df[df["mutation"] != "TOTAL"]
+
+# ==============================
+# COMPTAGE DES LETTRES
+# ==============================
+
+letter_counts = defaultdict(int)
+
+for _, row in df.iterrows():
+    mutation = row["mutation"]
+    count = row["count"]
+
+    for letter in mutation:
+        letter_counts[letter] += count
+
+# ==============================
+# CALCUL DES PROPORTIONS
+# ==============================
+
+total_letters = sum(letter_counts.values())
+
+proportions = {
+    letter: letter_counts[letter] / total_letters
+    for letter in sorted(letter_counts.keys())
+}
+
+# ==============================
+# AFFICHAGE
+# ==============================
+
+print("\nNombre total de lettres analysées :", total_letters)
+print("\nProportions :\n")
+
+for letter, prop in proportions.items():
+    print(f"{letter} : {prop:.4f}")
+
+# ==============================
+# SAUVEGARDE CSV
+# ==============================
+
+result_df = pd.DataFrame({
+    "letter": list(proportions.keys()),
+    "proportion": list(proportions.values())
+})
+
+result_df.to_csv("letter_proportions.csv", index=False)
+
+print("\nRésultats sauvegardés dans letter_proportions.csv")
