@@ -73,6 +73,6 @@ result_df = pd.DataFrame({
     ]
 })
 
-result_df.to_csv("gggccc_mutations_2errors_no_gaps.csv", index=False)
+result_df.to_csv("gggccc_mutations_2errors_no_gaps_weight.csv", index=False)
 
-print("\nRésultats sauvegardés dans gggccc_mutations_2errors_no_gaps.csv")
+print("\nRésultats sauvegardés dans gggccc_mutations_2errors_no_gaps_weight.csv")
