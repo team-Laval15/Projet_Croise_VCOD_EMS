@@ -7,21 +7,25 @@ from collections import defaultdict
 # ==============================
 
 FASTA_DIR = "fasta_data_v1"
-PATTERNS_FILE = "patterns_mutations_merged.csv"
+MUTATIONS_FILE = "patterns_mutations_merged.csv"
 OUTPUT_FILE = "pattern_mutations_counts.csv"
 
+BASE_PATTERNS = ["gggccc", "acctcca", "tttttta", "gggacggg", "atatatat", "gtacacgt"]
+
 # ==============================
-# LECTURE DES PATTERNS FILTRÉS
+# CHARGEMENT DES MUTATIONS FILTRÉES
 # ==============================
 
-# On s'attend à un CSV : colonnes = pattern_base, mutation
-# Exemple : pattern_base,mutation
-#          gggccc,gggacc
-#          gggccc,gggccc
-patterns_df = pd.read_csv(PATTERNS_FILE)
+# On suppose que le CSV a 2 colonnes : "pattern" et "mutation"
+df_mut = pd.read_csv(MUTATIONS_FILE)
 
-# On crée un dictionnaire : {pattern_base: [mut1, mut2, ...]}
-patterns_dict = patterns_df.groupby("pattern_base")["mutation"].apply(list).to_dict()
+# Construire un dictionnaire : motif de base → liste des mutations autorisées
+mutations_dict = defaultdict(list)
+for _, row in df_mut.iterrows():
+    base = row["pattern"].lower()
+    mutation = row["mutation"].lower()
+    if base in BASE_PATTERNS:
+        mutations_dict[base].append(mutation)
 
 # ==============================
 # FONCTION POUR LIRE LES FICHIERS FASTA
@@ -30,42 +34,23 @@ patterns_dict = patterns_df.groupby("pattern_base")["mutation"].apply(list).to_d
 def read_fasta(filepath):
     sequences = {}
     with open(filepath, "r", encoding="utf-8") as f:
-        header = None
+        seq_name = None
         seq = ""
         for line in f:
             line = line.strip()
             if line.startswith(">"):
-                if header:
-                    sequences[header] = seq.lower()
-                header = line[1:]  # retire le >
+                if seq_name is not None:
+                    sequences[seq_name] = seq.lower()
+                seq_name = line[1:]
                 seq = ""
             else:
-                seq += line.lower()
-        if header:
-            sequences[header] = seq.lower()
+                seq += line
+        if seq_name is not None:
+            sequences[seq_name] = seq.lower()
     return sequences
 
 # ==============================
-# FONCTION POUR COMPTER LES MUTATIONS
-# ==============================
-
-def count_mutations(sequence, mutations):
-    """
-    Compte le nombre de fois que chaque mutation est présente dans la séquence
-    """
-    counts = defaultdict(int)
-    for mut in mutations:
-        mut_len = len(mut)
-        for i in range(len(sequence) - mut_len + 1):
-            window = sequence[i:i+mut_len]
-            if "-" in window:
-                continue  # on ignore les tirets
-            if window == mut:
-                counts[mut] += 1
-    return counts
-
-# ==============================
-# PARCOURS DES FICHIERS ET COMPTAGE
+# COMPTE DES MUTATIONS
 # ==============================
 
 results = []
@@ -76,23 +61,28 @@ for root, dirs, files in os.walk(FASTA_DIR):
             filepath = os.path.join(root, file)
             sequences = read_fasta(filepath)
 
-            for seq_name, seq in sequences.items():
-                row = {"sequence_name": seq_name}
-
-                for pattern_base, mutations in patterns_dict.items():
-                    mut_counts = count_mutations(seq, mutations)
-                    row[pattern_base] = sum(mut_counts.values())  # total pour ce pattern
-
+            for name, seq in sequences.items():
+                row = {"sequence_name": name}
+                
+                for base in BASE_PATTERNS:
+                    count = 0
+                    for mut in mutations_dict[base]:
+                        mut_len = len(mut)
+                        # compter toutes les occurrences chevauchantes
+                        for i in range(len(seq) - mut_len + 1):
+                            if seq[i:i+mut_len] == mut:
+                                count += 1
+                    row[base] = count
+                
                 results.append(row)
 
 # ==============================
-# CREATION DATAFRAME ET SAUVEGARDE
+# CREATION DU CSV
 # ==============================
 
-df = pd.DataFrame(results)
+df_result = pd.DataFrame(results)
+cols = ["sequence_name"] + BASE_PATTERNS
+df_result = df_result[cols]
 
-# Colonnes dans l'ordre
-df = df[["sequence_name"] + list(patterns_dict.keys())]
-
-df.to_csv(OUTPUT_FILE, index=False)
-print(f"CSV sauvegardé : {OUTPUT_FILE}")
+df_result.to_csv(OUTPUT_FILE, index=False)
+print(f"CSV généré : {OUTPUT_FILE}")
