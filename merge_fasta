@@ -1,0 +1,58 @@
+import os
+import shutil
+
+# ==============================
+# CONFIGURATION
+# ==============================
+
+OLD_DIR = "fasta_data"
+SPLIT_DIR = "fasta_split"
+MERGE_DIR = "fasta_merge"
+
+os.makedirs(MERGE_DIR, exist_ok=True)
+
+# ==============================
+# RÉCUPÉRATION DES FICHIERS
+# ==============================
+
+old_files = set(f for f in os.listdir(OLD_DIR) if f.endswith(".fasta"))
+split_files = set(f for f in os.listdir(SPLIT_DIR) if f.endswith(".fasta"))
+
+all_files = old_files.union(split_files)
+
+# ==============================
+# FUSION
+# ==============================
+
+for filename in all_files:
+
+    old_path = os.path.join(OLD_DIR, filename)
+    split_path = os.path.join(SPLIT_DIR, filename)
+    merge_path = os.path.join(MERGE_DIR, filename)
+
+    # Cas 1 : présent dans les deux dossiers → fusion
+    if filename in old_files and filename in split_files:
+        with open(merge_path, "w", encoding="utf-8") as outfile:
+
+            # écrire ancien contenu
+            with open(old_path, "r", encoding="utf-8") as f1:
+                outfile.write(f1.read().strip() + "\n")
+
+            # écrire nouveau contenu
+            with open(split_path, "r", encoding="utf-8") as f2:
+                outfile.write(f2.read().strip() + "\n")
+
+        print(f"Fusionné : {filename}")
+
+    # Cas 2 : seulement dans ancien dossier
+    elif filename in old_files:
+        shutil.copy2(old_path, merge_path)
+        print(f"Copié depuis fasta_data : {filename}")
+
+    # Cas 3 : seulement dans split
+    elif filename in split_files:
+        shutil.copy2(split_path, merge_path)
+        print(f"Copié depuis fasta_split : {filename}")
+
+print("\nFusion terminée.")
+print(f"Dossier final : {MERGE_DIR}")
