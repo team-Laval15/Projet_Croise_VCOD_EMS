@@ -1,0 +1,32 @@
+# pipelines/merge_fasta.py
+
+import os
+import shutil
+from pipelines.utils import ensure_dir
+
+def merge_directories(old_dir, new_dir, merge_dir):
+    ensure_dir(merge_dir)
+
+    old_files = set(os.listdir(old_dir))
+    new_files = set(os.listdir(new_dir))
+
+    all_files = old_files.union(new_files)
+
+    for file in all_files:
+        old_path = os.path.join(old_dir, file)
+        new_path = os.path.join(new_dir, file)
+        merge_path = os.path.join(merge_dir, file)
+
+        if file in old_files and file in new_files:
+            with open(merge_path, "w", encoding="utf-8") as out:
+                with open(old_path, "r", encoding="utf-8") as f1:
+                    out.write(f1.read().strip() + "\n")
+                with open(new_path, "r", encoding="utf-8") as f2:
+                    out.write(f2.read().strip() + "\n")
+            print(f"Fusionné : {file}")
+
+        elif file in old_files:
+            shutil.copy2(old_path, merge_path)
+
+        elif file in new_files:
+            shutil.copy2(new_path, merge_path)
