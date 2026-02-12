@@ -26,7 +26,7 @@ df = pd.read_csv("gggccc_mutations_2errors_IUPAC.csv")
 df = df[df["mutation"].str.upper() != "TOTAL"]
 
 if df.empty:
-    print("⚠️ Aucun motif détecté dans le CSV.")
+    print("Aucun motif détecté dans le CSV.")
     exit()
 
 letter_counts = defaultdict(float)
@@ -45,7 +45,7 @@ for _, row in df.iterrows():
 total_letters = sum(letter_counts.values())
 
 if total_letters == 0:
-    print("⚠️ Aucune lettre valide trouvée.")
+    print("Aucune lettre valide trouvée.")
     exit()
 
 proportions = {
@@ -58,3 +58,21 @@ print("\nProportions corrigées IUPAC :\n")
 
 for base, prop in proportions.items():
     print(f"{base} : {prop:.4f}")
+# =========================
+# Sauvegarde dans nouveau CSV
+# =========================
+
+result_df = pd.DataFrame({
+    "base": ["A", "C", "G", "T", "TOTAL_WEIGHTED"],
+    "value": [
+        proportions["A"],
+        proportions["C"],
+        proportions["G"],
+        proportions["T"],
+        total_letters
+    ]
+})
+
+result_df.to_csv("gggccc_mutations_2errors_no_gaps.csv", index=False)
+
+print("\nRésultats sauvegardés dans gggccc_mutations_2errors_no_gaps.csv")
