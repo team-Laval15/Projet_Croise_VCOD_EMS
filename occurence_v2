@@ -6,7 +6,7 @@ from collections import defaultdict
 # CONFIGURATION
 # ==============================
 
-ROOT_DIR = "fasta_downloads"
+ROOT_DIR = "fasta_data"
 
 PATTERNS = [
     "gggccc",
@@ -24,12 +24,10 @@ MAX_MISMATCH = 2
 # ==============================
 
 def hamming_distance(s1, s2):
-    """Distance de Hamming entre deux séquences de même longueur"""
     return sum(c1 != c2 for c1, c2 in zip(s1, s2))
 
 
 def count_pattern_in_sequence(sequence, pattern, max_mismatch):
-    """Compte toutes les occurrences d'un motif dans une séquence avec erreurs autorisées"""
     counts = defaultdict(int)
     k = len(pattern)
 
