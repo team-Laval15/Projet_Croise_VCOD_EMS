@@ -22,7 +22,7 @@ patterns = []
 
 for file in csv_files:
     if not os.path.exists(file):
-        print(f"Fichier manquant : {file}")
+        print(f"sFichier manquant : {file}")
         totals.append(0)
         patterns.append(file.split("_")[0])
         continue
@@ -45,4 +45,9 @@ for file in csv_files:
 # ==============================
 plt.figure(figsize=(10,6))
 plt.bar(patterns, totals, color='skyblue')
-plt.ylabel("Total o
+plt.ylabel("Total occurrences")
+plt.xlabel("Motifs")
+plt.title("Occurrences totales des motifs dans chaque fichier CSV")
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.tight_layout()
+plt.show()
