@@ -1,0 +1,70 @@
+import os
+import re
+
+# ==============================
+# CONFIGURATION
+# ==============================
+
+INPUT_DIR = "fasta_input"      # dossier contenant les gros fasta
+OUTPUT_DIR = "fasta_split"     # dossier où seront créés les fichiers séparés
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# ==============================
+# FONCTION POUR LIRE UN FASTA
+# ==============================
+
+def read_fasta(filepath):
+    sequences = {}
+    with open(filepath, "r", encoding="utf-8") as f:
+        seq_name = None
+        seq = ""
+
+        for line in f:
+            line = line.strip()
+            if line.startswith(">"):
+                if seq_name is not None:
+                    sequences[seq_name] = seq
+                seq_name = line[1:]
+                seq = ""
+            else:
+                seq += line
+
+        if seq_name is not None:
+            sequences[seq_name] = seq
+
+    return sequences
+
+# ==============================
+# NETTOYAGE NOM DE FICHIER
+# ==============================
+
+def clean_filename(name):
+    # enlève caractères problématiques pour Windows/Linux
+    name = re.sub(r"[^\w\-\.]", "_", name)
+    return name
+
+# ==============================
+# SPLIT DES FICHIERS FASTA
+# ==============================
+
+for file in os.listdir(INPUT_DIR):
+    if file.endswith(".fasta"):
+        filepath = os.path.join(INPUT_DIR, file)
+        sequences = read_fasta(filepath)
+
+        for name, seq in sequences.items():
+            if not seq.strip():
+                continue
+
+            clean_name = clean_filename(name)
+            output_path = os.path.join(OUTPUT_DIR, f"{clean_name}.fasta")
+
+            with open(output_path, "w", encoding="utf-8") as out:
+                out.write(f">{name}\n")
+
+                # coupe la séquence en lignes de 80 caractères (format standard FASTA)
+                for i in range(0, len(seq), 80):
+                    out.write(seq[i:i+80] + "\n")
+
+print("Extraction terminée. Un fichier .fasta par séquence a été créé.")
