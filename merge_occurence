@@ -1,85 +1,52 @@
-import os
 import pandas as pd
-from collections import defaultdict
+import os
 
 # ==============================
 # CONFIGURATION
 # ==============================
 
-FASTA_DIR = "patterns_filtered"  # dossier contenant tous les fichiers filtrés
-OUTPUT_CSV = "motifs_mutations.csv"
+CSV_DIR = "csv_filtered"  # dossier où se trouvent les 6 CSV filtrées
+OUTPUT_CSV = "patterns_mutations_merged.csv"
 
-PATTERNS = ["gggccc", "acctcca", "tttttta", "gggacggg", "atatatat", "gtacacgt"]
-MAX_MISMATCH = 2
-
-# ==============================
-# FONCTION DISTANCE HAMMING SIMPLE
-# ==============================
-
-def hamming_distance(s1, s2):
-    return sum(c1 != c2 for c1, c2 in zip(s1, s2))
+# Si tes CSV ont un nom type : gggccc_filtered.csv, acctcca_filtered.csv, etc.
+CSV_FILES = [f for f in os.listdir(CSV_DIR) if f.endswith(".csv")]
 
 # ==============================
-# FONCTION POUR TROUVER LES MUTATIONS
+# FUSION DES CSV
 # ==============================
 
-def find_mutations(sequence, reference, max_mismatch):
-    mutations = defaultdict(int)
-    k = len(reference)
-    for i in range(len(sequence) - k + 1):
-        window = sequence[i:i+k]
+all_data = []
 
-        # Ignore les tirets
-        if "-" in window:
-            continue
+for csv_file in CSV_FILES:
+    pattern_name = csv_file.split("_")[0]  # prend le motif depuis le nom du fichier
+    path = os.path.join(CSV_DIR, csv_file)
 
-        dist = hamming_distance(window, reference)
+    df = pd.read_csv(path)
 
-        if dist <= max_mismatch:
-            mutations[window] += 1
-    return mutations
+    # Supprimer TOTAL si présent
+    df = df[df["mutation"].str.upper() != "TOTAL"]
 
-# ==============================
-# PARCOURS DES FICHIERS
-# ==============================
+    # Ajouter le nom du motif
+    df["pattern"] = pattern_name
 
-all_mutations = []
+    all_data.append(df)
 
-for root, dirs, files in os.walk(FASTA_DIR):
-    for file in files:
-        if file.endswith(".fasta"):
-            filepath = os.path.join(root, file)
+# Concaténer tous les motifs
+merged_df = pd.concat(all_data, ignore_index=True)
 
-            with open(filepath, "r", encoding="utf-8") as f:
-                sequence = ""
-                for line in f:
-                    if line.startswith(">"):
-                        continue
-                    sequence += line.strip().lower()
+# Ajouter total occurrences par motif
+total_per_pattern = merged_df.groupby("pattern")["count"].sum().reset_index()
+total_per_pattern.rename(columns={"count": "total_count"}, inplace=True)
 
-            # Pour chaque motif
-            for pattern in PATTERNS:
-                muts = find_mutations(sequence, pattern, MAX_MISMATCH)
-                for mut, count in muts.items():
-                    all_mutations.append({
-                        "file": file,
-                        "pattern": pattern,
-                        "mutation": mut,
-                        "count": count
-                    })
+# Fusionner avec le dataframe principal
+merged_df = merged_df.merge(total_per_pattern, on="pattern", how="left")
+
+# Réorganiser colonnes
+merged_df = merged_df[["pattern", "mutation", "count", "total_count"]]
 
 # ==============================
-# CREATION DATAFRAME ET CSV
+# SAUVEGARDE
 # ==============================
 
-df = pd.DataFrame(all_mutations)
-
-# Ajouter total par pattern si besoin
-totals = df.groupby(["file", "pattern"])["count"].sum().reset_index()
-totals["mutation"] = "TOTAL"
-totals = totals[["file", "pattern", "mutation", "count"]]
-
-df_final = pd.concat([df, totals], ignore_index=True)
-
-df_final.to_csv(OUTPUT_CSV, index=False)
-print(f"CSV sauvegardé : {OUTPUT_CSV}")
+merged_df.to_csv(OUTPUT_CSV, index=False)
+print(f"CSV fusionné sauvegardé : {OUTPUT_CSV}")
