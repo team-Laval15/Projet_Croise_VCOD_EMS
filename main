@@ -4,7 +4,7 @@ from pipelines.merge_fasta import merge_directories
 from pipelines.utils import ensure_dir
 
 # ==============================
-# Paramètres à renseigner
+# Paramètres à renseigner via input
 # ==============================
 
 SERVER = input("Serveur (ex: http://ton_serveur) : ").strip()
@@ -35,8 +35,9 @@ for country in COUNTRIES:
     country = country.strip()
     for year in range(START_YEAR, END_YEAR + 1):
         for quarter in range(1, 5):
-
-            print(f"\nTéléchargement : {country} {year}Q{quarter}")
+            print(f"\n=== Traitement {country} {year}Q{quarter} ===")
+            
+            # 1️⃣ Téléchargement
             file_path = fetch_legacy(
                 SERVER,
                 DATASET,
@@ -46,12 +47,12 @@ for country in COUNTRIES:
                 TEMP_DIR
             )
 
-            # Split si fichier téléchargé et format FASTA
+            # 2️⃣ Split si format FASTA
             if file_path and FORMATS == "fasta":
                 split_fasta(file_path, SPLIT_DIR)
 
-# Fusion finale
+# 3️⃣ Fusion finale
 merge_directories(OLD_DATA_DIR, SPLIT_DIR, MERGE_DIR)
 
-print("\nPipeline terminé avec succès !")
-print(f"Fusion des données disponibles dans : {MERGE_DIR}")
+print("\n✅ Pipeline terminé avec succès !")
+print(f"Fusion des données disponible dans : {MERGE_DIR}")
