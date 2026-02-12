@@ -10,58 +10,57 @@ NEW_DIR = "new_fasta"
 
 os.makedirs(NEW_DIR, exist_ok=True)
 
-# Regex pour détecter le format correct
-pattern = re.compile(r"^[A-Za-z0-9_]+\.\d{2}\.\d{2}\.\d{4}\.[A-Z]{2}$")
-
 # ==============================
-# FONCTION POUR CORRIGER ID
+# PATTERN STANDARD
 # ==============================
 
-def correct_id(old_id):
-    # Enlever tout espace ou caractères inutiles
-    old_id = old_id.strip().replace(" ", "_")
-    
-    # Si déjà correct, on garde
-    if pattern.match(old_id):
-        return old_id
-    
-    # Sinon, on essaye de reconstruire
-    # Exemple : prendre l'ID avant le premier point comme id
-    parts = re.split(r"[._-]", old_id)
-    
-    # On doit avoir au moins 5 éléments : id, jj, mm, yyyy, code_pays
-    if len(parts) >= 5:
-        id_part = parts[0]
-        day = parts[1].zfill(2)
-        month = parts[2].zfill(2)
-        year = parts[3]
-        country = parts[4].upper()
-        new_id = f"{id_part}.{day}.{month}.{year}.{country}"
-    else:
-        # Si on ne peut pas reconstruire, mettre un placeholder
-        new_id = f"{old_id}.01.01.1970.FR"
-    
-    return new_id
+# Exemple standard attendu : U58801.23.7.1987.FR
+STANDARD_PATTERN = re.compile(r'^(\w+)\.(\d{1,2})\.(\d{1,2})\.(\d{4})\.(\w{2})$')
+
+# Pattern simple pour extraire composantes si ordre incorrect ou séparateurs différents
+ID_EXTRACT_PATTERN = re.compile(r'(\w+)[\._\-](\d{1,2})[\._\-](\d{1,2})[\._\-](\d{4})[\._\-](\w{2})', re.IGNORECASE)
 
 # ==============================
-# PARCOURS DES FICHIERS FASTA
+# PARCOURS DES FICHIERS
 # ==============================
 
 for root, dirs, files in os.walk(ROOT_DIR):
     for file in files:
-        if file.endswith(".fasta"):
-            filepath = os.path.join(root, file)
-            new_filepath = os.path.join(NEW_DIR, file)
+        if not file.endswith(".fasta"):
+            continue
 
-            with open(filepath, "r", encoding="utf-8") as f_in, \
-                 open(new_filepath, "w", encoding="utf-8") as f_out:
+        filepath = os.path.join(root, file)
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        new_lines = []
+
+        for line in lines:
+            if line.startswith(">"):
+                id_line = line[1:].strip()  # retirer le >
                 
-                for line in f_in:
-                    if line.startswith(">"):
-                        old_id = line[1:].strip()
-                        new_id = correct_id(old_id)
-                        f_out.write(f">{new_id}\n")
+                # Vérifier si l'ID est correct
+                if STANDARD_PATTERN.match(id_line):
+                    new_id = id_line  # correct, on garde
+                else:
+                    # essayer d'extraire composantes
+                    m = ID_EXTRACT_PATTERN.search(id_line)
+                    if m:
+                        code, jj, mm, yyyy, country = m.groups()
+                        # reformater correctement
+                        new_id = f"{code}.{int(jj)}.{int(mm)}.{yyyy}.{country.upper()}"
                     else:
-                        f_out.write(line)
+                        print(f"Impossible de corriger l'ID : {id_line}")
+                        new_id = id_line  # on laisse tel quel
 
-print(f"✅ Tous les fichiers FASTA corrigés ont été enregistrés dans '{NEW_DIR}'")
+                new_lines.append(f">{new_id}\n")
+            else:
+                new_lines.append(line)
+
+        # Sauvegarder dans new_fasta avec même nom
+        new_path = os.path.join(NEW_DIR, file)
+        with open(new_path, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+
+        print(f"{file} traité, sauvegardé dans {NEW_DIR}")
