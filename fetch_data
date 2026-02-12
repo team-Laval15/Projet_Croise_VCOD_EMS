@@ -4,19 +4,31 @@ import requests
 import os
 
 def fetch_legacy(server, dataset, country, year, quarter, output_dir):
-    url = f"{server}/archived/{dataset}/{country}/{year}Q{quarter}"
+    """
+    Télécharge les données via l'API legacy :
+    {server}/archived/{dataset}/{country}/{year}Q{quarter}
+    """
 
-    response = requests.get(url)
+    trimester = f"{year}Q{quarter}"
+    url = f"{server}/archived/{dataset}/{country}/{trimester}"
 
-    if response.status_code == 200:
-        filename = f"{country}_{year}Q{quarter}.fasta"
-        path = os.path.join(output_dir, filename)
+    try:
+        response = requests.get(url, timeout=30)
 
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(response.text)
+        if response.status_code == 200 and response.text.strip():
+            filename = f"{country}_{trimester}.fasta"
+            path = os.path.join(output_dir, filename)
 
-        print(f"Téléchargé : {filename}")
-        return path
-    else:
-        print(f"Aucune donnée : {country} {year}Q{quarter}")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(response.text)
+
+            print(f"✔ Téléchargé : {filename}")
+            return path
+
+        else:
+            print(f"✘ Pas de données : {country} {trimester}")
+            return None
+
+    except requests.exceptions.RequestException as e:
+        print(f"⚠ Erreur connexion {country} {trimester} : {e}")
         return None
