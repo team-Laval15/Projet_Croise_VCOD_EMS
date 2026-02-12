@@ -1,0 +1,54 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+
+# ==============================
+# LISTE DES CSV
+# ==============================
+csv_files = [
+    "gggccc_mutations_2errors.csv",
+    "acctcca_mutations_2errors.csv",
+    "tttttta_mutations_2errors.csv",
+    "gggacggg_mutations_2errors.csv",
+    "atatatat_mutations_2errors.csv",
+    "gtacacgt_mutations_2errors.csv"
+]
+
+# Dossier pour enregistrer les graphiques
+output_dir = "mutation_graphs"
+os.makedirs(output_dir, exist_ok=True)
+
+# ==============================
+# BOUCLE SUR CHAQUE CSV
+# ==============================
+for csv_file in csv_files:
+    if not os.path.exists(csv_file):
+        print(f"Fichier non trouvé : {csv_file}")
+        continue
+
+    df = pd.read_csv(csv_file)
+
+    # Supprimer la ligne TOTAL si elle existe
+    df = df[df["mutation"].str.upper() != "TOTAL"]
+
+    if df.empty:
+        print(f"Aucun motif détecté dans {csv_file}")
+        continue
+
+    # Créer le graphique
+    plt.figure(figsize=(10, 6))
+    plt.bar(df["mutation"], df["count"], color="skyblue")
+    plt.xlabel("Mutation")
+    plt.ylabel("Occurrences")
+    plt.title(f"Occurrences des mutations dans {csv_file}")
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+
+    # Sauvegarder
+    png_file = os.path.join(output_dir, csv_file.replace(".csv", ".png"))
+    plt.savefig(png_file)
+    plt.close()
+
+    print(f"Graphique sauvegardé : {png_file}")
+
+print("\nTous les graphiques générés dans le dossier 'mutation_graphs'")
