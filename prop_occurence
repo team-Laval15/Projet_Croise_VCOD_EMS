@@ -20,7 +20,7 @@ IUPAC = {
     "N": ["A", "C", "G", "T"],
 }
 
-df = pd.read_csv("gggccc_mutations_2errors_IUPAC.csv")
+df = pd.read_csv("gggccc_mutations_2errors_no_gaps.csv")
 
 # Supprimer TOTAL proprement
 df = df[df["mutation"].str.upper() != "TOTAL"]
