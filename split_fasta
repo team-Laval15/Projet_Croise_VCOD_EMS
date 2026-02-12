@@ -1,0 +1,42 @@
+# pipelines/split_fasta.py
+
+import os
+from collections import defaultdict
+from pipelines.utils import get_trimester, ensure_dir
+
+def split_fasta(input_file, output_dir):
+    ensure_dir(output_dir)
+
+    grouped = defaultdict(list)
+
+    with open(input_file, "r", encoding="utf-8") as f:
+        header = None
+        seq = ""
+
+        for line in f:
+            line = line.strip()
+
+            if line.startswith(">"):
+                if header:
+                    grouped[key].append((header, seq))
+
+                header = line
+                seq = ""
+
+                parts = line[1:].split(".")
+                if len(parts) >= 5:
+                    day, month, year, country = parts[1], parts[2], parts[3], parts[4]
+                    trimester = get_trimester(month)
+                    key = f"{country}_{year}Q{trimester}"
+
+            else:
+                seq += line
+
+        if header:
+            grouped[key].append((header, seq))
+
+    for key, sequences in grouped.items():
+        path = os.path.join(output_dir, f"{key}.fasta")
+        with open(path, "a", encoding="utf-8") as out:
+            for h, s in sequences:
+                out.write(f"{h}\n{s}\n")
