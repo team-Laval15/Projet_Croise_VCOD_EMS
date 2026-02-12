@@ -31,6 +31,21 @@ def read_fasta(filepath):
     return sequences
 
 # ==============================
+# FONCTION POUR COMPTER LES OCCURRENCES
+# ==============================
+
+def count_pattern(seq, pattern):
+    count = 0
+    start = 0
+    while True:
+        pos = seq.find(pattern, start)
+        if pos == -1:
+            break
+        count += 1
+        start = pos + 1  # permet de compter les occurrences chevauchantes
+    return count
+
+# ==============================
 # PARCOURS DES FICHIERS ET CHECK PATTERNS
 # ==============================
 
@@ -42,25 +57,34 @@ for root, dirs, files in os.walk(ROOT_DIR):
             filepath = os.path.join(root, file)
             sequences = read_fasta(filepath)
 
+            # Essayer de récupérer le pays à partir du nom de fichier
+            country = os.path.basename(file).split("_")[0]  # exemple : FR_1987Q1.fasta
+
             for name, seq in sequences.items():
-                # Ignore les séquences vides
                 if not seq:
                     continue
 
-                row = {"sequence_name": name}
+                row = {
+                    "sequence_name": name,
+                    "country": country
+                }
+
                 for pattern in PATTERNS:
-                    # True si le motif est présent
-                    row[pattern] = pattern in seq
+                    row[pattern] = count_pattern(seq, pattern)
+
                 results.append(row)
 
 # ==============================
-# CREATION DATAFRAME ET SAUVEGARDE
+# CREATION DATAFRAME ET TRI
 # ==============================
 
 df = pd.DataFrame(results)
 
-# Mettre les colonnes dans l'ordre souhaité
-df = df[["sequence_name"] + PATTERNS]
+# Trier par pays alphabétiquement, puis par nom de séquence
+df = df.sort_values(by=["country", "sequence_name"])
 
-df.to_csv("sequence_patterns_presence.csv", index=False)
-print("CSV sauvegardé : sequence_patterns_presence.csv")
+# Colonnes finales
+df = df[["country", "sequence_name"] + PATTERNS]
+
+df.to_csv("sequence_patterns_counts.csv", index=False)
+print("CSV sauvegardé : sequence_patterns_counts.csv")
