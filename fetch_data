@@ -4,47 +4,30 @@ import os
 import requests
 from pipelines.utils import ensure_dir
 
-def fetch_legacy(server, dataset, countries, years, quarters, output_dir):
+def fetch_legacy(server, dataset, country, year, quarter, output_dir):
     """
-    Télécharge les fichiers legacy depuis le serveur et retourne la liste des fichiers créés.
-
-    Params:
-    - server: URL du serveur
-    - dataset: nom du dataset (ex: sequences)
-    - countries: liste de codes pays ['FR', 'DE']
-    - years: liste ou range d'années [1987, 1988]
-    - quarters: liste de trimestres [1,2,3,4]
-    - output_dir: dossier où sauvegarder les fichiers
-
-    Returns:
-    - fichiers téléchargés (chemins complets)
+    Télécharge le fichier legacy pour un seul pays / année / trimestre.
     """
-
     ensure_dir(output_dir)
+    
+    url = f"{server}/archived/{dataset}/{country}/{year}Q{quarter}"
+    print(f"Téléchargement : {url}")
+    
+    try:
+        response = requests.get(url)
+        if response.status_code == 200 and response.text.strip():
+            filename = f"{country}_{year}Q{quarter}.fasta"
+            path = os.path.join(output_dir, filename)
 
-    downloaded_files = []
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(response.text.strip() + "\n")
 
-    for country in countries:
-        for year in years:
-            for quarter in quarters:
-                url = f"{server}/archived/{dataset}/{country}/{year}Q{quarter}"
-                print(f"Téléchargement : {url}")
-                try:
-                    response = requests.get(url)
-                    if response.status_code == 200 and response.text.strip():
-                        filename = f"{country}_{year}Q{quarter}.fasta"
-                        path = os.path.join(output_dir, filename)
+            print(f"✔ Fichier créé : {filename}")
+            return path
+        else:
+            print(f"⚠ Pas de données pour {country} {year}Q{quarter}")
+            return None
 
-                        with open(path, "w", encoding="utf-8") as f:
-                            f.write(response.text.strip() + "\n")
-
-                        print(f"✔ Fichier créé : {filename}")
-                        downloaded_files.append(path)
-                    else:
-                        print(f"⚠ Pas de données pour {country} {year}Q{quarter}")
-
-                except Exception as e:
-                    print(f"Erreur téléchargement {country} {year}Q{quarter} : {e}")
-
-    return downloaded_files
-S
+    except Exception as e:
+        print(f"Erreur téléchargement {country} {year}Q{quarter} : {e}")
+        return None
