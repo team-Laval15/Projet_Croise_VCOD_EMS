@@ -1,0 +1,45 @@
+from pipelines.fetch_data import fetch_legacy
+from pipelines.split_fasta import split_fasta
+from pipelines.merge_fasta import merge_directories
+from pipelines.utils import ensure_dir
+
+# ==============================
+# PARAMÈTRES À MODIFIER
+# ==============================
+
+SERVER = "http://ton_serveur"
+DATASET = "sequences"
+COUNTRY = "FR"
+START_YEAR = 1987
+END_YEAR = 1988
+
+OLD_DATA_DIR = "fasta_data"
+TEMP_DIR = "new_data"
+SPLIT_DIR = "fasta_split"
+MERGE_DIR = "fasta_merge"
+
+# ==============================
+
+ensure_dir(TEMP_DIR)
+ensure_dir(SPLIT_DIR)
+
+# 1️⃣ Téléchargement
+for year in range(START_YEAR, END_YEAR + 1):
+    for quarter in range(1, 5):
+        file_path = fetch_legacy(
+            SERVER,
+            DATASET,
+            COUNTRY,
+            year,
+            quarter,
+            TEMP_DIR
+        )
+
+        # 2️⃣ Split si fichier existe
+        if file_path:
+            split_fasta(file_path, SPLIT_DIR)
+
+# 3️⃣ Fusion
+merge_directories(OLD_DATA_DIR, SPLIT_DIR, MERGE_DIR)
+
+print("\nPipeline terminé avec succès.")
