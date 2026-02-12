@@ -2,57 +2,84 @@ import pandas as pd
 from collections import defaultdict
 
 # ==============================
+# TABLE IUPAC (pondération égale)
+# ==============================
+
+IUPAC = {
+    "A": ["A"],
+    "C": ["C"],
+    "G": ["G"],
+    "T": ["T"],
+    "U": ["T"],
+    "R": ["A", "G"],
+    "Y": ["C", "T"],
+    "S": ["G", "C"],
+    "W": ["A", "T"],
+    "K": ["G", "T"],
+    "M": ["A", "C"],
+    "B": ["C", "G", "T"],
+    "D": ["A", "G", "T"],
+    "H": ["A", "C", "T"],
+    "V": ["A", "C", "G"],
+    "N": ["A", "C", "G", "T"],
+}
+
+# ==============================
 # CHARGEMENT CSV
 # ==============================
 
 df = pd.read_csv("gggccc_mutations_2errors_no_gaps.csv")
 
-# Supprimer la ligne TOTAL si elle existe
+# Supprimer la ligne TOTAL
 df = df[df["mutation"] != "TOTAL"]
 
 # ==============================
-# COMPTAGE DES LETTRES
+# COMPTAGE PONDÉRÉ
 # ==============================
 
-letter_counts = defaultdict(int)
+letter_counts = defaultdict(float)
 
 for _, row in df.iterrows():
     mutation = row["mutation"]
     count = row["count"]
 
     for letter in mutation:
-        letter_counts[letter] += count
+        if letter in IUPAC:
+            bases = IUPAC[letter]
+            weight = count / len(bases)
+            for base in bases:
+                letter_counts[base] += weight
 
 # ==============================
-# CALCUL DES PROPORTIONS
+# CALCUL PROPORTIONS
 # ==============================
 
 total_letters = sum(letter_counts.values())
 
 proportions = {
-    letter: letter_counts[letter] / total_letters
-    for letter in sorted(letter_counts.keys())
+    base: letter_counts[base] / total_letters
+    for base in ["A", "C", "G", "T"]
 }
 
 # ==============================
 # AFFICHAGE
 # ==============================
 
-print("\nNombre total de lettres analysées :", total_letters)
-print("\nProportions :\n")
+print("\nTotal lettres pondérées :", total_letters)
+print("\nProportions corrigées IUPAC :\n")
 
-for letter, prop in proportions.items():
-    print(f"{letter} : {prop:.4f}")
+for base, prop in proportions.items():
+    print(f"{base} : {prop:.4f}")
 
 # ==============================
-# SAUVEGARDE CSV
+# SAUVEGARDE
 # ==============================
 
 result_df = pd.DataFrame({
-    "letter": list(proportions.keys()),
-    "proportion": list(proportions.values())
+    "base": proportions.keys(),
+    "proportion": proportions.values()
 })
 
-result_df.to_csv("letter_proportions.csv", index=False)
+result_df.to_csv("letter_proportions_IUPAC_weighted.csv", index=False)
 
-print("\nRésultats sauvegardés dans letter_proportions.csv")
+print("\nRésultats sauvegardés dans letter_proportions_IUPAC_weighted.csv")
