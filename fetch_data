@@ -1,72 +1,50 @@
-import requests
+# pipelines/fetch_data.py
+
 import os
+import requests
+from pipelines.utils import ensure_dir
 
-# ==============================
-# CONFIGURATION
-# ==============================
+def fetch_legacy(server, dataset, countries, years, quarters, output_dir):
+    """
+    Télécharge les fichiers legacy depuis le serveur et retourne la liste des fichiers créés.
 
-BASE_URL = "http://172.22.215.130:8080"   
-DATASET = "sequences"
+    Params:
+    - server: URL du serveur
+    - dataset: nom du dataset (ex: sequences)
+    - countries: liste de codes pays ['FR', 'DE']
+    - years: liste ou range d'années [1987, 1988]
+    - quarters: liste de trimestres [1,2,3,4]
+    - output_dir: dossier où sauvegarder les fichiers
 
-START_YEAR = 1970
-END_YEAR = 2025
+    Returns:
+    - fichiers téléchargés (chemins complets)
+    """
 
-COUNTRIES = [
-    "PT","CH","DE","GB","CZ","FR","DK","LV","RU","HR","SI","GR","IT","RO",
-    "LT","SE","ES","BE","NO","FI","PL","NL","BY","LU","UA","AL","IE","AT",
-    "EE","RS","HU","ME","BG","SK","MD","IS"
-]
+    ensure_dir(output_dir)
 
-TRIMESTERS = ["Q1", "Q2", "Q3", "Q4"]
+    downloaded_files = []
 
-OUTPUT_DIR = "fasta_data"  # dossier de sortie
-FILE_EXTENSION = "fasta"   # ← ici tu choisis "fasta", "csv", etc.
+    for country in countries:
+        for year in years:
+            for quarter in quarters:
+                url = f"{server}/archived/{dataset}/{country}/{year}Q{quarter}"
+                print(f"Téléchargement : {url}")
+                try:
+                    response = requests.get(url)
+                    if response.status_code == 200 and response.text.strip():
+                        filename = f"{country}_{year}Q{quarter}.fasta"
+                        path = os.path.join(output_dir, filename)
 
-TIMEOUT = 15
+                        with open(path, "w", encoding="utf-8") as f:
+                            f.write(response.text.strip() + "\n")
 
-# ==============================
-# CREATION DOSSIER
-# ==============================
+                        print(f"✔ Fichier créé : {filename}")
+                        downloaded_files.append(path)
+                    else:
+                        print(f"⚠ Pas de données pour {country} {year}Q{quarter}")
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+                except Exception as e:
+                    print(f"Erreur téléchargement {country} {year}Q{quarter} : {e}")
 
-# ==============================
-# FONCTION DE TELECHARGEMENT
-# ==============================
-
-def download_dataset(dataset, country, year, trimester, ext="fasta"):
-    url = f"{BASE_URL}/archived/{dataset}/{country}/{year}{trimester}"
-    print(f"Test {country} {year}{trimester}...")
-
-    try:
-        response = requests.get(url, timeout=TIMEOUT)
-
-        # Vérifie que la réponse contient quelque chose
-        if response.status_code == 200 and response.text.strip():
-            filename = f"{country}_{year}{trimester}.{ext}"
-            filepath = os.path.join(OUTPUT_DIR, filename)
-
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(response.text)
-
-            print(f"  → Sauvé : {filename}")
-            return filepath
-
-        else:
-            print("  → Pas de données")
-            return None
-
-    except requests.RequestException as e:
-        print(f"  → Erreur connexion : {e}")
-        return None
-
-# ==============================
-# BOUCLE PRINCIPALE
-# ==============================
-
-for country in COUNTRIES:
-    for year in range(START_YEAR, END_YEAR + 1):
-        for trimester in TRIMESTERS:
-            download_dataset(DATASET, country, year, trimester, FILE_EXTENSION)
-
-print("\nExtraction terminée.")
+    return downloaded_files
+S
