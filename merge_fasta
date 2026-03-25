@@ -1,32 +1,50 @@
 # pipelines/merge_fasta.py
-
+ 
 import os
 import shutil
 from pipelines.utils import ensure_dir
-
+ 
+ 
 def merge_directories(old_dir, new_dir, merge_dir):
+    """
+    Fusionne deux dossiers de fichiers FASTA dans un dossier de sortie.
+ 
+    - Si un fichier existe dans les deux dossiers → concaténation
+    - Si un fichier n'existe que dans un seul dossier → copie simple
+    """
     ensure_dir(merge_dir)
-
-    old_files = set(os.listdir(old_dir))
-    new_files = set(os.listdir(new_dir))
-
-    all_files = old_files.union(new_files)
-
-    for file in all_files:
-        old_path = os.path.join(old_dir, file)
-        new_path = os.path.join(new_dir, file)
-        merge_path = os.path.join(merge_dir, file)
-
-        if file in old_files and file in new_files:
+ 
+    old_files = set(os.listdir(old_dir)) if os.path.isdir(old_dir) else set()
+    new_files = set(os.listdir(new_dir)) if os.path.isdir(new_dir) else set()
+    all_files = old_files | new_files
+ 
+    merged = 0
+    copied = 0
+ 
+    for filename in sorted(all_files):
+        old_path   = os.path.join(old_dir, filename)
+        new_path   = os.path.join(new_dir, filename)
+        merge_path = os.path.join(merge_dir, filename)
+ 
+        if filename in old_files and filename in new_files:
+            # Concaténation : ancien + nouveau
             with open(merge_path, "w", encoding="utf-8") as out:
-                with open(old_path, "r", encoding="utf-8") as f1:
-                    out.write(f1.read().strip() + "\n")
-                with open(new_path, "r", encoding="utf-8") as f2:
-                    out.write(f2.read().strip() + "\n")
-            print(f"Fusionné : {file}")
-
-        elif file in old_files:
+                for src in (old_path, new_path):
+                    with open(src, "r", encoding="utf-8") as f:
+                        content = f.read().strip()
+                        if content:
+                            out.write(content + "\n")
+            print(f"  🔀 Fusionné  : {filename}")
+            merged += 1
+ 
+        elif filename in old_files:
             shutil.copy2(old_path, merge_path)
-
-        elif file in new_files:
+            print(f"  📁 Copié (old) : {filename}")
+            copied += 1
+ 
+        else:
             shutil.copy2(new_path, merge_path)
+            print(f"  📁 Copié (new) : {filename}")
+            copied += 1
+ 
+    print(f"\n  ✔  Merge terminé — {merged} fusionné(s), {copied} copié(s) → {merge_dir}")
