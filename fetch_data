@@ -1,113 +1,115 @@
 # pipelines/fetch_data.py
- 
+
 import os
 import requests
 from pipelines.utils import ensure_dir
- 
+
 FASTA_DATASETS = {"sequences"}
 CSV_DATASETS   = {"cancer", "biomedical", "social"}
- 
- 
+
+# Codes retour
+OK        = "ok"
+EMPTY     = "empty"       # page vide → pas de données pour ce pays/trimestre
+TOO_EARLY = "too_early"   # données pas encore arrivées → réessayer plus tard
+ERROR     = "error"       # erreur technique
+
+
 def _build_url(server, dataset, country, year, quarter, token=None):
     trimester = f"{year}Q{quarter}"
     url = f"{server}/v2/archived/{dataset}/{country}/{trimester}"
     if token:
         url += f"?token={token}"
     return url, trimester
- 
- 
-def _handle_response(response, country, trimester):
-    """Gère les codes HTTP connus. Retourne True si OK, False sinon."""
+
+
+def _check_response(response, country, trimester):
+    """Analyse la réponse et retourne (status, content)."""
     if response.status_code == 401:
-        print(f"  ❌ Token invalide ou absent ({country} {trimester}).")
-        return False
+        print(f"  ❌ Token invalide ({country} {trimester})")
+        return ERROR, None
     if response.status_code == 402:
-        print(f"  ❌ Quota dépassé / paiement requis ({country} {trimester}).")
-        return False
+        print(f"  ❌ Quota dépassé ({country} {trimester})")
+        return ERROR, None
     if response.status_code == 404:
-        print(f"  ⚠  Aucune donnée pour {country} {trimester}.")
-        return False
+        return EMPTY, None
+
     try:
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         print(f"  ❌ Erreur HTTP {country} {trimester} : {e}")
-        return False
-    return True
- 
- 
+        return ERROR, None
+
+    content = response.text.strip()
+
+    if not content:
+        return EMPTY, None
+
+    if "too early" in content.lower():
+        return TOO_EARLY, None
+
+    return OK, content
+
+
 def fetch_fasta(server, country, year, quarter, output_dir, token=None):
     """
-    Télécharge un fichier FASTA (dataset 'sequences') depuis l'API v2.
-    Retourne le chemin du fichier créé, ou None.
+    Télécharge un fichier FASTA (dataset 'sequences').
+    Retourne (status, chemin_fichier_ou_None).
     """
     ensure_dir(output_dir)
     url, trimester = _build_url(server, "sequences", country, year, quarter, token)
-    print(f"  [FASTA] GET {url}")
- 
+
     try:
         response = requests.get(url, timeout=30)
-        if not _handle_response(response, country, trimester):
-            return None
- 
-        content = response.text.strip()
-        if not content:
-            print(f"  ⚠  Réponse vide pour {country} {trimester}.")
-            return None
- 
+        status, content = _check_response(response, country, trimester)
+
+        if status != OK:
+            return status, None
+
         filename = f"{country}_{trimester}.fasta"
         path = os.path.join(output_dir, filename)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content + "\n")
- 
-        print(f"  ✔  {filename}")
-        return path
- 
+
+        return OK, path
+
     except requests.exceptions.Timeout:
-        print(f"  ❌ Timeout pour {country} {trimester}.")
-        return None
+        print(f"  ❌ Timeout {country} {trimester}")
+        return ERROR, None
     except Exception as e:
-        print(f"  ❌ Erreur inattendue {country} {trimester} : {e}")
-        return None
- 
- 
+        print(f"  ❌ Erreur {country} {trimester} : {e}")
+        return ERROR, None
+
+
 def fetch_csv(server, dataset, country, year, quarter, output_dir, token=None):
     """
-    Télécharge des données CSV (cancer / biomedical / social) depuis l'API v2.
-    Retourne le chemin du fichier créé, ou None.
+    Télécharge des données CSV (cancer / biomedical / social).
+    Retourne (status, chemin_fichier_ou_None).
     """
     ensure_dir(output_dir)
     url, trimester = _build_url(server, dataset, country, year, quarter, token)
-    print(f"  [CSV/{dataset}] GET {url}")
- 
+
     try:
         response = requests.get(url, timeout=30)
-        if not _handle_response(response, country, trimester):
-            return None
- 
-        content = response.text.strip()
-        if not content:
-            print(f"  ⚠  Réponse vide pour {country} {trimester}.")
-            return None
- 
+        status, content = _check_response(response, country, trimester)
+
+        if status != OK:
+            return status, None
+
         filename = f"{dataset}_{country}_{trimester}.csv"
         path = os.path.join(output_dir, filename)
- 
-        # Si le fichier existe déjà on ajoute, sinon on crée
         mode = "a" if os.path.exists(path) else "w"
         with open(path, mode, encoding="utf-8") as f:
             if mode == "w":
                 f.write(content + "\n")
             else:
-                # Saute le header CSV pour éviter les doublons
                 lines = content.splitlines()
                 f.write("\n".join(lines[1:]) + "\n")
- 
-        print(f"  ✔  {filename}")
-        return path
- 
+
+        return OK, path
+
     except requests.exceptions.Timeout:
-        print(f"  ❌ Timeout pour {country} {trimester}.")
-        return None
+        print(f"  ❌ Timeout {country} {trimester}")
+        return ERROR, None
     except Exception as e:
-        print(f"  ❌ Erreur inattendue {country} {trimester} : {e}")
-        return None
+        print(f"  ❌ Erreur {country} {trimester} : {e}")
+        return ERROR, None
