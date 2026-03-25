@@ -36,3 +36,7 @@ Du fait du trop grand nombre de requetes, l'API est devenue payante :
 
 Pour utiliser votre token d'acces, suffixez les URL par :
     ?token=$VOTRE_TOKEN
+
+
+Motoken 
+LAVAL:32880dbba2220f70
