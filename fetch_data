@@ -1,32 +1,55 @@
 # pipelines/fetch_data.py
-
+ 
 import os
 import requests
 from pipelines.utils import ensure_dir
-
-def fetch_legacy(server, dataset, country, year, quarter, output_dir):
+ 
+def fetch_v2(server, dataset, country, year, quarter, output_dir, token=None):
     """
-    Télécharge le fichier legacy pour un seul pays / année / trimestre.
+    Télécharge le fichier FASTA depuis l'API v2 pour un pays / année / trimestre.
     """
     ensure_dir(output_dir)
-    
-    url = f"{server}/archived/{dataset}/{country}/{year}Q{quarter}"
+ 
+    trimester = f"{year}Q{quarter}"
+    url = f"{server}/v2/archived/{dataset}/{country}/{trimester}"
+ 
+    if token:
+        url += f"?token={token}"
+ 
     print(f"Téléchargement : {url}")
-    
+ 
     try:
         response = requests.get(url)
-        if response.status_code == 200 and response.text.strip():
-            filename = f"{country}_{year}Q{quarter}.fasta"
+ 
+        if response.status_code == 401:
+            print("Token invalide ou absent. Vérifiez votre token d'accès.")
+            return None
+ 
+        if response.status_code == 402:
+            print("Quota dépassé ou paiement requis. Vérifiez votre solde.")
+            return None
+ 
+        response.raise_for_status()
+ 
+        if response.text.strip():
+            filename = f"{country}_{trimester}.fasta"
             path = os.path.join(output_dir, filename)
-
+ 
             with open(path, "w", encoding="utf-8") as f:
                 f.write(response.text.strip() + "\n")
-
-            print(f"✔ Fichier créé : {filename}")
+ 
+            print(f"Fichier créé : {filename}")
             return path
         else:
-            print(f"⚠ Pas de données pour {country} {year}Q{quarter}")
+            print(f"Pas de données pour {country} {trimester}")
             return None
+ 
+    except requests.exceptions.HTTPError as e:
+        print(f"Erreur HTTP {country} {trimester} : {e}")
+        return None
+    except Exception as e:
+        print(f"Erreur téléchargement {country} {trimester} : {e}")
+        return None
 
     except Exception as e:
         print(f"Erreur téléchargement {country} {year}Q{quarter} : {e}")
