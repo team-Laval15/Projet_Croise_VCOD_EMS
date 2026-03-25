@@ -1,65 +1,116 @@
-from pipelines.fetch_data import fetch_v2
+# main.py
+ 
+from pipelines.fetch_data  import fetch_fasta, fetch_csv, FASTA_DATASETS, CSV_DATASETS
 from pipelines.split_fasta import split_fasta
 from pipelines.merge_fasta import merge_directories
-from pipelines.utils import ensure_dir
-
-# ==============================
-# Paramètres à renseigner via input
-# ==============================
-
-SERVER  = input("Serveur (ex: http://ton_serveur) : ").strip()
+from pipelines.utils       import ensure_dir
+ 
+ALL_DATASETS = FASTA_DATASETS | CSV_DATASETS
+ 
+# ============================================================
+# Paramètres
+# ============================================================
+ 
+print("=" * 50)
+print("       Pipeline d'extraction de données ADN")
+print("=" * 50)
+ 
+SERVER  = input("\nServeur (ex: http://ton_serveur) : ").strip()
 TOKEN   = input("Token d'accès (laisser vide si aucun) : ").strip() or None
-DATASET = input("Dataset (sequences, cancer, biomedical, social) : ").strip()
-COUNTRIES = input("Pays (FR, DE, etc., séparés par des virgules) : ").strip().upper().split(",")
+ 
+print(f"\nDatasets disponibles : {', '.join(sorted(ALL_DATASETS))}")
+datasets_input = input("Datasets à télécharger (séparés par des virgules) : ").strip().lower()
+DATASETS = {d.strip() for d in datasets_input.split(",") if d.strip() in ALL_DATASETS}
+ 
+invalid = {d.strip() for d in datasets_input.split(",") if d.strip() not in ALL_DATASETS}
+if invalid:
+    print(f"⚠  Datasets inconnus ignorés : {', '.join(invalid)}")
+if not DATASETS:
+    print("❌ Aucun dataset valide. Arrêt.")
+    exit(1)
+ 
+COUNTRIES  = [c.strip() for c in input("Pays (FR, DE, etc., séparés par des virgules) : ").strip().upper().split(",")]
 START_YEAR = int(input("Année de début : ").strip())
-END_YEAR   = int(input("Année de fin : ").strip())
-FORMATS    = input("Formats à extraire (fasta ou csv) : ").strip().lower()
-
-OLD_DATA_DIR = input("Dossier des anciennes données : ").strip() or "fasta_data"
-TEMP_DIR     = input("Dossier temporaire pour nouvelles données : ").strip() or "new_data"
-SPLIT_DIR    = input("Dossier pour données splitées : ").strip() or "fasta_split"
-MERGE_DIR    = input("Dossier final pour fusion : ").strip() or "fasta_merge"
-
-if TOKEN:
-    print(f"\nToken détecté — utilisation de l'API v2 avec authentification.")
-else:
-    print(f"\n⚠ Aucun token renseigné — les requêtes pourront être refusées (API payante).")
-
-# ==============================
-# Création des dossiers si inexistants
-# ==============================
-
-ensure_dir(TEMP_DIR)
-ensure_dir(SPLIT_DIR)
-ensure_dir(MERGE_DIR)
-
-# ==============================
+END_YEAR   = int(input("Année de fin   : ").strip())
+ 
+# Dossiers
+OLD_DATA_DIR = input("\nDossier des anciennes données FASTA : ").strip() or "fasta_data"
+TEMP_DIR     = input("Dossier temporaire (nouvelles données brutes) : ").strip() or "new_data"
+SPLIT_DIR    = input("Dossier pour FASTA splités : ").strip() or "fasta_split"
+MERGE_DIR    = input("Dossier final (FASTA fusionnés) : ").strip() or "fasta_merge"
+CSV_DIR      = input("Dossier pour les CSV : ").strip() or "csv_data"
+ 
+# ============================================================
+# Résumé avant lancement
+# ============================================================
+ 
+nb_requetes = len(COUNTRIES) * (END_YEAR - START_YEAR + 1) * 4 * len(DATASETS)
+cout_estime = nb_requetes * 0.01
+ 
+print("\n" + "=" * 50)
+print("  Résumé du pipeline")
+print("=" * 50)
+print(f"  Serveur   : {SERVER}")
+print(f"  Token     : {'✔ défini' if TOKEN else '✘ absent'}")
+print(f"  Datasets  : {', '.join(sorted(DATASETS))}")
+print(f"  Pays      : {', '.join(COUNTRIES)}")
+print(f"  Période   : {START_YEAR} → {END_YEAR}")
+print(f"  Requêtes  : ~{nb_requetes} (~{cout_estime:.2f}€ estimés)")
+print("=" * 50)
+ 
+confirm = input("\nLancer le pipeline ? (o/n) : ").strip().lower()
+if confirm != "o":
+    print("Annulé.")
+    exit(0)
+ 
+# ============================================================
+# Création des dossiers
+# ============================================================
+ 
+for d in (TEMP_DIR, SPLIT_DIR, MERGE_DIR, CSV_DIR):
+    ensure_dir(d)
+ 
+# ============================================================
 # Pipeline
-# ==============================
-
+# ============================================================
+ 
 for country in COUNTRIES:
-    country = country.strip()
     for year in range(START_YEAR, END_YEAR + 1):
         for quarter in range(1, 5):
-            print(f"\n=== Traitement {country} {year}Q{quarter} ===")
-
-            # 1️ Téléchargement via API v2
-            file_path = fetch_v2(
-                SERVER,
-                DATASET,
-                country,
-                year,
-                quarter,
-                TEMP_DIR,
-                token=TOKEN
-            )
-
-            # 2️ Split si format FASTA
-            if file_path and FORMATS == "fasta":
-                split_fasta(file_path, SPLIT_DIR)
-
-# 3️ Fusion finale
-merge_directories(OLD_DATA_DIR, SPLIT_DIR, MERGE_DIR)
-
-print("\nPipeline terminé avec succès !")
+ 
+            print(f"\n{'─'*50}")
+            print(f"  {country}  {year}Q{quarter}")
+            print(f"{'─'*50}")
+ 
+            # — Séquences FASTA —
+            if "sequences" in DATASETS:
+                fasta_path = fetch_fasta(
+                    SERVER, country, year, quarter, TEMP_DIR, token=TOKEN
+                )
+                if fasta_path:
+                    split_fasta(fasta_path, SPLIT_DIR)
+ 
+            # — Datasets CSV —
+            for dataset in DATASETS - {"sequences"}:
+                fetch_csv(
+                    SERVER, dataset, country, year, quarter, CSV_DIR, token=TOKEN
+                )
+ 
+# ============================================================
+# Fusion finale des FASTA
+# ============================================================
+ 
+if "sequences" in DATASETS:
+    print(f"\n{'='*50}")
+    print("  Fusion finale des fichiers FASTA")
+    print(f"{'='*50}")
+    merge_directories(OLD_DATA_DIR, SPLIT_DIR, MERGE_DIR)
+ 
+print(f"\n{'='*50}")
+print("  ✅  Pipeline terminé avec succès !")
+if "sequences" in DATASETS:
+    print(f"  FASTA fusionnés → {MERGE_DIR}")
+if DATASETS - {"sequences"}:
+    print(f"  CSV             → {CSV_DIR}")
+print(f"{'='*50}")
 print(f"Fusion des données disponible dans : {MERGE_DIR}")
