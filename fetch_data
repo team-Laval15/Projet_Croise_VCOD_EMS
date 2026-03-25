@@ -101,7 +101,7 @@ def fetch_csv(server, dataset, country, year, quarter, base_dataset_dir, token=N
         if status != OK:
             return status, None
 
-        filename = f"{dataset}_{country}_{trimester}.csv"
+        filename = f"{country}_{trimester}.csv"
         path = os.path.join(country_dir, filename)
 
         # Chaque trimestre = 1 fichier dédié (pas d'append)
