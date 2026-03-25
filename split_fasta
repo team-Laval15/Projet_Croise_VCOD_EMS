@@ -1,42 +1,76 @@
 # pipelines/split_fasta.py
-
+ 
 import os
 from collections import defaultdict
 from pipelines.utils import get_trimester, ensure_dir
-
+ 
+ 
 def split_fasta(input_file, output_dir):
+    """
+    Lit un fichier FASTA brut et répartit les séquences dans des fichiers
+    par pays + trimestre réel (extrait depuis le header).
+ 
+    Format attendu du header :
+        >IDENTIFIANT.JOUR.MOIS.ANNÉE.PAYS
+    Exemple :
+        >U58801.23.7.1987.FR
+    """
     ensure_dir(output_dir)
-
+ 
     grouped = defaultdict(list)
-
+    skipped = 0
+ 
     with open(input_file, "r", encoding="utf-8") as f:
         header = None
-        seq = ""
-
+        key    = None
+        seq    = ""
+ 
         for line in f:
             line = line.strip()
-
+            if not line:
+                continue
+ 
             if line.startswith(">"):
-                if header:
+                # Sauvegarde la séquence précédente si complète
+                if header and key:
                     grouped[key].append((header, seq))
-
+                elif header and not key:
+                    skipped += 1
+ 
+                # Nouveau header
                 header = line
-                seq = ""
-
+                seq    = ""
+                key    = None
+ 
+                # Parse : >ID.jour.mois.année.pays
                 parts = line[1:].split(".")
                 if len(parts) >= 5:
-                    day, month, year, country = parts[1], parts[2], parts[3], parts[4]
-                    trimester = get_trimester(month)
-                    key = f"{country}_{year}Q{trimester}"
-
+                    _id, jour, mois, annee, pays = parts[0], parts[1], parts[2], parts[3], parts[4]
+                    trimester = get_trimester(mois)
+                    if trimester:
+                        key = f"{pays}_{annee}Q{trimester}"
+                    else:
+                        print(f"  ⚠  Mois invalide dans le header : {line}")
+                else:
+                    print(f"  ⚠  Header mal formé, séquence ignorée : {line}")
+ 
             else:
                 seq += line
-
-        if header:
+ 
+        # Dernière séquence
+        if header and key:
             grouped[key].append((header, seq))
-
+        elif header and not key:
+            skipped += 1
+ 
+    if skipped:
+        print(f"  ⚠  {skipped} séquence(s) ignorée(s) (header mal formé).")
+ 
+    # Écriture des fichiers de sortie (mode append pour ne pas écraser)
     for key, sequences in grouped.items():
         path = os.path.join(output_dir, f"{key}.fasta")
         with open(path, "a", encoding="utf-8") as out:
             for h, s in sequences:
                 out.write(f"{h}\n{s}\n")
+ 
+    print(f"  ✔  Split → {len(grouped)} fichier(s) mis à jour dans {output_dir}")
