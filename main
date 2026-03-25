@@ -1,4 +1,4 @@
-from pipelines.fetch_data import fetch_legacy
+from pipelines.fetch_data import fetch_v2
 from pipelines.split_fasta import split_fasta
 from pipelines.merge_fasta import merge_directories
 from pipelines.utils import ensure_dir
@@ -7,20 +7,26 @@ from pipelines.utils import ensure_dir
 # Paramètres à renseigner via input
 # ==============================
 
-SERVER = input("Serveur (ex: http://ton_serveur) : ").strip()
-DATASET = input("Dataset (sequences, cancer, etc.) : ").strip()
+SERVER  = input("Serveur (ex: http://ton_serveur) : ").strip()
+TOKEN   = input("Token d'accès (laisser vide si aucun) : ").strip() or None
+DATASET = input("Dataset (sequences, cancer, biomedical, social) : ").strip()
 COUNTRIES = input("Pays (FR, DE, etc., séparés par des virgules) : ").strip().upper().split(",")
 START_YEAR = int(input("Année de début : ").strip())
-END_YEAR = int(input("Année de fin : ").strip())
-FORMATS = input("Formats à extraire (fasta ou csv) : ").strip().lower()
+END_YEAR   = int(input("Année de fin : ").strip())
+FORMATS    = input("Formats à extraire (fasta ou csv) : ").strip().lower()
 
 OLD_DATA_DIR = input("Dossier des anciennes données : ").strip() or "fasta_data"
-TEMP_DIR = input("Dossier temporaire pour nouvelles données : ").strip() or "new_data"
-SPLIT_DIR = input("Dossier pour données splitées : ").strip() or "fasta_split"
-MERGE_DIR = input("Dossier final pour fusion : ").strip() or "fasta_merge"
+TEMP_DIR     = input("Dossier temporaire pour nouvelles données : ").strip() or "new_data"
+SPLIT_DIR    = input("Dossier pour données splitées : ").strip() or "fasta_split"
+MERGE_DIR    = input("Dossier final pour fusion : ").strip() or "fasta_merge"
+
+if TOKEN:
+    print(f"\nToken détecté — utilisation de l'API v2 avec authentification.")
+else:
+    print(f"\n⚠ Aucun token renseigné — les requêtes pourront être refusées (API payante).")
 
 # ==============================
-# Création des dossiers si inexistant
+# Création des dossiers si inexistants
 # ==============================
 
 ensure_dir(TEMP_DIR)
@@ -36,23 +42,24 @@ for country in COUNTRIES:
     for year in range(START_YEAR, END_YEAR + 1):
         for quarter in range(1, 5):
             print(f"\n=== Traitement {country} {year}Q{quarter} ===")
-            
-            # 1️⃣ Téléchargement
-            file_path = fetch_legacy(
+
+            # 1️ Téléchargement via API v2
+            file_path = fetch_v2(
                 SERVER,
                 DATASET,
                 country,
                 year,
                 quarter,
-                TEMP_DIR
+                TEMP_DIR,
+                token=TOKEN
             )
 
-            # 2️⃣ Split si format FASTA
+            # 2️ Split si format FASTA
             if file_path and FORMATS == "fasta":
                 split_fasta(file_path, SPLIT_DIR)
 
-# 3️⃣ Fusion finale
+# 3️ Fusion finale
 merge_directories(OLD_DATA_DIR, SPLIT_DIR, MERGE_DIR)
 
-print("\n✅ Pipeline terminé avec succès !")
+print("\nPipeline terminé avec succès !")
 print(f"Fusion des données disponible dans : {MERGE_DIR}")
