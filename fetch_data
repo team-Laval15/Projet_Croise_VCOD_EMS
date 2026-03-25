@@ -53,6 +53,7 @@ def _check_response(response, country, trimester):
 def fetch_fasta(server, country, year, quarter, output_dir, token=None):
     """
     Télécharge un fichier FASTA (dataset 'sequences').
+    Les FASTA sont stockés à plat dans output_dir (pas de sous-dossier pays).
     Retourne (status, chemin_fichier_ou_None).
     """
     ensure_dir(output_dir)
@@ -80,12 +81,17 @@ def fetch_fasta(server, country, year, quarter, output_dir, token=None):
         return ERROR, None
 
 
-def fetch_csv(server, dataset, country, year, quarter, output_dir, token=None):
+def fetch_csv(server, dataset, country, year, quarter, base_dataset_dir, token=None):
     """
     Télécharge des données CSV (cancer / biomedical / social).
+    Crée un sous-dossier par pays : base_dataset_dir/{country}/
+    Nomme le fichier : {dataset}_{country}_{year}Q{quarter}.csv
     Retourne (status, chemin_fichier_ou_None).
     """
-    ensure_dir(output_dir)
+    # Sous-dossier pays
+    country_dir = os.path.join(base_dataset_dir, country)
+    ensure_dir(country_dir)
+
     url, trimester = _build_url(server, dataset, country, year, quarter, token)
 
     try:
@@ -96,14 +102,11 @@ def fetch_csv(server, dataset, country, year, quarter, output_dir, token=None):
             return status, None
 
         filename = f"{dataset}_{country}_{trimester}.csv"
-        path = os.path.join(output_dir, filename)
-        mode = "a" if os.path.exists(path) else "w"
-        with open(path, mode, encoding="utf-8") as f:
-            if mode == "w":
-                f.write(content + "\n")
-            else:
-                lines = content.splitlines()
-                f.write("\n".join(lines[1:]) + "\n")
+        path = os.path.join(country_dir, filename)
+
+        # Chaque trimestre = 1 fichier dédié (pas d'append)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content + "\n")
 
         return OK, path
 
