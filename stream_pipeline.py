@@ -41,7 +41,7 @@ def detect_resume_point(base_dir, datasets, countries):
 
     Retourne (last_year, last_q) ou None si rien trouvé.
     """
-    pattern_csv   = re.compile(r'_(\d{4})Q([1-4])\.csv$')
+    pattern_csv   = re.compile(r'^[A-Z]{2,3}_(\d{4})Q([1-4])\.csv$')
     pattern_fasta = re.compile(r'_(\d{4})Q([1-4])\.fasta$')
 
     found = set()  # ensemble de (year, q)
@@ -85,7 +85,7 @@ def already_done(base_dir, datasets, country, year, quarter):
             path = os.path.join(base_dir, "sequences", f"{country}_{trimester}.fasta")
         else:
             path = os.path.join(base_dir, dataset, country,
-                                f"{dataset}_{country}_{trimester}.csv")
+                                f"{country}_{trimester}.csv")
         if not (os.path.isfile(path) and os.path.getsize(path) > 0):
             return False
     return True
