@@ -1,0 +1,27 @@
+Not Found
+
+New API:
+========
+
+Routes:
+	- GET /v2/archived/{dataset}/{country}/{trimester}
+	- GET /v2/streams/{country}
+	- GET /v2/quota/
+
+Options:
+	- available datasets: sequences,cancer,biomedical,social
+	- available countries: CM,CA,UG,CI,PT,TZ,CH,DE,GB,KE,CZ,RW,FR,DK,LV,KZ,RU,HR,SI,GR,IT,MA,RO,KG,GA,GE,LT,SE,SN,CG,ES,GH,US,CF,AU,KR,PH,BE,NO,FI,PL,IN,NL,CN,BR,CD,IL,LB,NG,BY,GW,CY,LU,UA,GQ,UZ,JP,AL,IE,AT,CO,AR,AM,AO,ZA,PE,PY,TR,EE,UY,PK,ML,BF,TH,RE,ID,MQ,TD,RS,HU,CU,MW,ME,SG,AZ,BG,SC,BI,TG,TW,GM,SK,DZ,TJ,KW,BJ,GN,MN,PR,MD,NE,MM,ZM,GF,IS,BD,VE,SD,BO,FJ,ET,DJ,IR,GP,HK,VN
+	- trimester format: YYYYQT, e.g. 1987Q1, 1987Q2, 1987Q3, 1987Q4
+
+Legacy:
+=======
+
+Routes:
+	- GET /archived/{dataset}/{country}/{trimester}
+	- GET /streams/{country}
+	- GET /quota/{IP}
+
+Options:
+	- available datasets: sequences,cancer,biomedical,social
+	- available countries: PT,CH,DE,GB,CZ,FR,DK,LV,RU,HR,SI,GR,IT,RO,LT,SE,ES,BE,NO,FI,PL,NL,BY,LU,UA,AL,IE,AT,EE,RS,HU,ME,BG,SK,MD,IS
+	- trimester format: YYYYQT, e.g. 1987Q1, 1987Q2, 1987Q3, 1987Q4
