@@ -1,10 +1,10 @@
 # pipelines/utils.py
-
+ 
 import os
-
+ 
 def ensure_dir(path):
     os.makedirs(path, exist_ok=True)
-
+ 
 def get_trimester(month):
     month = int(month)
     if 1 <= month <= 3:
@@ -16,3 +16,4 @@ def get_trimester(month):
     elif 10 <= month <= 12:
         return 4
     return None
+ 
