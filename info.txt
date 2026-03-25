@@ -25,3 +25,14 @@ Options:
 	- available datasets: sequences,cancer,biomedical,social
 	- available countries: PT,CH,DE,GB,CZ,FR,DK,LV,RU,HR,SI,GR,IT,RO,LT,SE,ES,BE,NO,FI,PL,NL,BY,LU,UA,AL,IE,AT,EE,RS,HU,ME,BG,SK,MD,IS
 	- trimester format: YYYYQT, e.g. 1987Q1, 1987Q2, 1987Q3, 1987Q4
+
+
+request try:
+Token absent
+
+Du fait du trop grand nombre de requetes, l'API est devenue payante :
+- 0.01E/requete sur les archives.
+- 0.10E/requete sur les flux.
+
+Pour utiliser votre token d'acces, suffixez les URL par :
+    ?token=$VOTRE_TOKEN
