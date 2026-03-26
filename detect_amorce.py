@@ -41,14 +41,14 @@ def lire_fasta(path):
                 continue
             if line.startswith(">"):
                 if header is not None:
-                    sequences.append((header[1:].split(".")[0], seq))
+                    sequences.append((header[1:], seq))
                 header = line
                 seq    = ""
             else:
                 seq += line
 
     if header is not None:
-        sequences.append((header[1:].split(".")[0], seq))
+        sequences.append((header[1:], seq))
 
     return sequences
 
