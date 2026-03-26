@@ -52,7 +52,7 @@ if confirm != "o":
 print()
 
 # ============================================================
-# Helpers
+# Helpers généraux
 # ============================================================
 
 def list_files(folder, extension):
@@ -63,13 +63,10 @@ def list_files(folder, extension):
 
 
 def read_fasta(path):
-    """
-    Lit un fichier FASTA et retourne une liste de (header, sequence).
-    """
+    """Lit un fichier FASTA, retourne une liste de (header, sequence)."""
     sequences = []
     header = None
     seq    = ""
-
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -82,17 +79,84 @@ def read_fasta(path):
                 seq    = ""
             else:
                 seq += line
-
     if header is not None:
         sequences.append((header, seq))
-
     return sequences
 
 
+def write_fasta(path, sequences):
+    """Écrit une liste de (header, seq) dans un fichier FASTA."""
+    with open(path, "w", encoding="utf-8") as f:
+        for header, seq in sequences:
+            f.write(f"{header}\n{seq}\n")
+
+
 def extract_fasta_id(header):
-    """Extrait l'identifiant depuis un header FASTA (premier champ avant le point)."""
-    # >U58801.23.7.1987.FR  →  U58801
+    """Extrait l'ID depuis un header FASTA : >U58801.23.7.1987.FR → U58801"""
     return header[1:].split(".")[0]
+
+
+def header_suffix(header):
+    """Retourne tout ce qui suit le premier champ : .23.7.1987.FR"""
+    parts = header[1:].split(".", 1)
+    return "." + parts[1] if len(parts) > 1 else ""
+
+
+# ============================================================
+# Helpers génération de nouvel ID
+# ============================================================
+
+import re
+
+def detect_id_format(existing_id):
+    """
+    Analyse un ID existant et retourne (prefix, digits, suffix) ou None.
+    Exemples :
+      U58801   → ("U",  "58801",  "")
+      AF461909 → ("AF", "461909", "")
+      AY010335 → ("AY", "010335", "")
+      JQ292417 → ("JQ", "292417", "")
+    """
+    m = re.match(r'^([A-Za-z]+)(\d+)([A-Za-z]*)$', existing_id)
+    if m:
+        return m.group(1), m.group(2), m.group(3)
+    return None
+
+
+def generate_new_id(existing_ids):
+    """
+    Génère un nouvel ID unique en se basant sur le format des IDs existants.
+    Prend l'ID le plus long/représentatif, incrémente le numéro jusqu'à
+    trouver un ID absent de existing_ids.
+    """
+    # Choisit un ID de référence parmi ceux qui ont un format détectable
+    ref_id = None
+    ref_fmt = None
+    for eid in existing_ids:
+        fmt = detect_id_format(eid)
+        if fmt:
+            ref_id  = eid
+            ref_fmt = fmt
+            break
+
+    if ref_fmt is None:
+        # Fallback : format générique si aucun ID analysable
+        n = 1
+        while f"NEW{n:06d}" in existing_ids:
+            n += 1
+        return f"NEW{n:06d}"
+
+    prefix, digits, suffix = ref_fmt
+    num_len = len(digits)
+    base    = int(digits)
+
+    # Incrémente jusqu'à trouver un ID libre
+    candidate = base + 1
+    while True:
+        new_id = f"{prefix}{str(candidate).zfill(num_len)}{suffix}"
+        if new_id not in existing_ids:
+            return new_id
+        candidate += 1
 
 
 # ============================================================
@@ -105,18 +169,23 @@ print("─" * 60)
 
 old_fasta_files = set(list_files(FASTA_OLD_DIR, ".fasta"))
 new_fasta_files = set(list_files(FASTA_NEW_DIR, ".fasta"))
-all_fasta_files = old_fasta_files | new_fasta_files
+dup_fasta_files = set(list_files(os.path.join(DUP_DIR, "sequences"), ".fasta"))
+all_fasta_files = old_fasta_files | new_fasta_files | dup_fasta_files
 
-fasta_stats = {"fichiers": 0, "sequences": 0, "doublons": 0}
+fasta_stats = {"fichiers": 0, "sequences": 0, "doublons_mis_de_cote": 0,
+               "doublons_identiques_supprimes": 0, "doublons_reintegres": 0}
 
 for filename in sorted(all_fasta_files):
     old_path = os.path.join(FASTA_OLD_DIR, filename)
     new_path = os.path.join(FASTA_NEW_DIR, filename)
+    dup_path = os.path.join(DUP_DIR, "sequences", filename)
+    out_path = os.path.join(OUT_DIR, "sequences", filename)
 
-    sequences_vues = {}   # id → (header, seq)  — première occurrence gardée
-    doublons       = {}   # id → (header, seq)   — occurrences en doublon
+    # ── Étape 1 : lecture de toutes les sources ──────────────
+    # Ordre de priorité : anciens → nouveaux
+    sequences_vues = {}   # id → (header, seq) — première occurrence gardée
+    candidats_dup  = []   # [(id_original, header, seq)] — doublons à analyser
 
-    # Lecture dans l'ordre : anciens d'abord, nouveaux ensuite
     sources = []
     if filename in old_fasta_files:
         sources.append(old_path)
@@ -129,33 +198,82 @@ for filename in sorted(all_fasta_files):
             if seq_id not in sequences_vues:
                 sequences_vues[seq_id] = (header, seq)
             else:
-                doublons[seq_id] = (header, seq)
+                candidats_dup.append((seq_id, header, seq))
 
-    # Écriture du fichier fusionné
-    out_path = os.path.join(OUT_DIR, "sequences", filename)
-    with open(out_path, "w", encoding="utf-8") as f:
-        for seq_id, (header, seq) in sequences_vues.items():
-            f.write(f"{header}\n{seq}\n")
+    # ── Étape 2 : réintégration des doublons du run précédent ─
+    # Les séquences dans duplicates/ ont déjà un nouvel ID → on les
+    # réintègre directement si leur ID ne crée pas de nouveau conflit.
+    reintegres = 0
+    if filename in dup_fasta_files:
+        for header, seq in read_fasta(dup_path):
+            seq_id = extract_fasta_id(header)
+            if seq_id not in sequences_vues:
+                sequences_vues[seq_id] = (header, seq)
+                reintegres += 1
+            else:
+                # Conflit encore présent → on le remet dans candidats
+                candidats_dup.append((seq_id, header, seq))
 
-    # Écriture des doublons
-    if doublons:
-        dup_path = os.path.join(DUP_DIR, "sequences", filename)
-        with open(dup_path, "w", encoding="utf-8") as f:
-            for seq_id, (header, seq) in doublons.items():
-                f.write(f"{header}\n{seq}\n")
+    fasta_stats["doublons_reintegres"] += reintegres
+
+    # ── Étape 3 : traitement des doublons restants ────────────
+    # Pour chaque doublon, on compare la séquence avec l'originale :
+    #   - identique → supprimé silencieusement
+    #   - différente → nouvel ID généré et mis de côté
+    nouveaux_doublons = []   # (new_header, seq) à écrire dans duplicates/
+    supprimes         = 0
+
+    for seq_id_original, header, seq in candidats_dup:
+        _, seq_originale = sequences_vues[seq_id_original]
+
+        if seq == seq_originale:
+            # Séquences identiques → doublon réel, on supprime
+            supprimes += 1
+        else:
+            # Séquences différentes → on génère un nouvel ID unique
+            all_known_ids = set(sequences_vues.keys()) | {
+                extract_fasta_id(h) for h, _ in nouveaux_doublons
+            }
+            new_id     = generate_new_id(all_known_ids)
+            new_header = f">{new_id}{header_suffix(header)}"
+            nouveaux_doublons.append((new_header, seq))
+
+    fasta_stats["doublons_identiques_supprimes"] += supprimes
+    fasta_stats["doublons_mis_de_cote"]          += len(nouveaux_doublons)
+
+    # ── Étape 4 : écriture ───────────────────────────────────
+    write_fasta(out_path, list(sequences_vues.values()))
+
+    # Écrase l'ancien fichier duplicates avec les nouveaux doublons
+    # (si vide ou inexistant on supprime le fichier pour ne pas laisser
+    #  de résidu d'un run précédent)
+    if nouveaux_doublons:
+        write_fasta(dup_path, nouveaux_doublons)
+    elif os.path.isfile(dup_path):
+        os.remove(dup_path)
 
     fasta_stats["fichiers"]  += 1
     fasta_stats["sequences"] += len(sequences_vues)
-    fasta_stats["doublons"]  += len(doublons)
 
-    status = f"  ✔  {filename}  ({len(sequences_vues)} séquences"
-    if doublons:
-        status += f", {len(doublons)} doublon(s) mis de côté"
-    print(status + ")")
+    # ── Affichage ─────────────────────────────────────────────
+    msg = f"  ✔  {filename}  ({len(sequences_vues)} séquences"
+    details = []
+    if supprimes:
+        details.append(f"{supprimes} identique(s) supprimé(s)")
+    if len(nouveaux_doublons):
+        details.append(f"{len(nouveaux_doublons)} différent(s) mis de côté avec nouvel ID")
+    if reintegres:
+        details.append(f"{reintegres} doublon(s) réintégré(s)")
+    if details:
+        msg += " — " + ", ".join(details)
+    print(msg + ")")
 
-print(f"\n  → {fasta_stats['fichiers']} fichier(s) fusionné(s), "
-      f"{fasta_stats['sequences']} séquences uniques, "
-      f"{fasta_stats['doublons']} doublon(s) au total")
+print(f"\n  → {fasta_stats['fichiers']} fichier(s) fusionné(s)")
+print(f"     {fasta_stats['sequences']} séquences uniques dans merged/")
+print(f"     {fasta_stats['doublons_identiques_supprimes']} doublon(s) identiques supprimés")
+print(f"     {fasta_stats['doublons_mis_de_cote']} doublon(s) différents mis de côté (nouvel ID)")
+if fasta_stats['doublons_reintegres']:
+    print(f"     {fasta_stats['doublons_reintegres']} doublon(s) réintégrés depuis duplicates/")
 
 # ============================================================
 # Fusion CSV
@@ -277,7 +395,8 @@ print("  ✅ Fusion terminée")
 print("=" * 60)
 print(f"  FASTA : {fasta_stats['fichiers']} fichiers, "
       f"{fasta_stats['sequences']} séquences uniques, "
-      f"{fasta_stats['doublons']} doublon(s)")
+      f"{fasta_stats['doublons_identiques_supprimes']} supprimé(s), "
+      f"{fasta_stats['doublons_mis_de_cote']} mis de côté")
 print(f"  CSV   : {csv_stats_total['fichiers']} fichiers, "
       f"{csv_stats_total['lignes']} lignes uniques, "
       f"{csv_stats_total['doublons']} doublon(s)")
