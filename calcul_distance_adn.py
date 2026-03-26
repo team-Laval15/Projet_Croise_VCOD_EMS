@@ -3,27 +3,21 @@
 import os
 import csv
 import gc
+import re
 import time
 import itertools
-import re
 from datetime import datetime, date
 
 # ============================================================
 # Section 0 — Paramètres configurables
 # ============================================================
 
-RACINE          = "data_merged_v4"
-OUTPUT_FILE     = "distances_output.csv"
-CHECKPOINT_FILE = "distances_checkpoint.csv"
-CHUNK_SIZE      = 500
-PAUSE_SECS      = 2
-SEUIL_LIEN      = 0.01
-TAUX_EVOLUTION  = 2.2e-6   # substitutions/site/jour (calibré SARS-CoV-2)
-CATEGORIES_META = ["cancer", "biomedical", "social"]
+CHUNK_SIZE     = 500
+PAUSE_SECS     = 2
+SEUIL_LIEN     = 0.01
+TAUX_EVOLUTION = 2.2e-6   # substitutions/site/jour (calibré SARS-CoV-2)
+BASES_AMBIGUES = set("N-?.")
 
-BASES_AMBIGUES  = set("N-?.")
-
-# Colonnes du fichier de sortie
 COLONNES = [
     "id_seq1", "id_seq2",
     "pays_seq1", "pays_seq2",
@@ -33,14 +27,40 @@ COLONNES = [
 ]
 
 # ============================================================
-# Section 1 — Fonctions utilitaires
+# Section 1 — Paramètres via input
+# ============================================================
+
+print("=" * 60)
+print("  Calcul des distances évolutives ADN")
+print("=" * 60)
+
+FASTA_DIR    = input("\nDossier des fichiers FASTA (ex: data_merged_v4/sequences) : ").strip()
+CANCER_DIR   = input("Dossier cancer   (ex: data_merged_v4/cancer)              : ").strip()
+BIO_DIR      = input("Dossier biomedical (ex: data_merged_v4/biomedical)        : ").strip()
+SOCIAL_DIR   = input("Dossier social   (ex: data_merged_v4/social)              : ").strip()
+
+OUTPUT_FILE     = input("\nFichier de résultats (défaut: distances_output.csv)   : ").strip() or "distances_output.csv"
+CHECKPOINT_FILE = input("Fichier checkpoint  (défaut: distances_checkpoint.csv) : ").strip() or "distances_checkpoint.csv"
+
+CATEGORIES_DIRS = {
+    "cancer":     CANCER_DIR,
+    "biomedical": BIO_DIR,
+    "social":     SOCIAL_DIR,
+}
+
+# Vérification que le dossier FASTA existe
+if not os.path.isdir(FASTA_DIR):
+    print(f"\n❌ Dossier FASTA introuvable : {FASTA_DIR}")
+    exit(1)
+
+# ============================================================
+# Section 2 — Fonctions utilitaires
 # ============================================================
 
 def extraire_pays_trimestre(nom_fichier):
     """
-    Parse un nom de fichier FASTA/CSV du type CP_XXXXQX.
-    Retourne (pays, trimestre) ou (None, None) si le format ne correspond pas.
-    Exemple : FR_2023Q1.fasta → ("FR", "2023Q1")
+    Parse un nom de fichier du type FR_2023Q1.fasta
+    Retourne (pays, trimestre) ou (None, None).
     """
     base = os.path.splitext(nom_fichier)[0]
     m = re.match(r'^([A-Z]{2,3})_(\d{4}Q[1-4])$', base)
@@ -57,10 +77,7 @@ def parse_date_header(header):
     parts = header[1:].split(".")
     if len(parts) >= 4:
         try:
-            jour  = int(parts[1])
-            mois  = int(parts[2])
-            annee = int(parts[3])
-            return date(annee, mois, jour)
+            return date(int(parts[3]), int(parts[2]), int(parts[1]))
         except (ValueError, IndexError):
             pass
     return None
@@ -69,13 +86,11 @@ def parse_date_header(header):
 def lire_fasta(path):
     """
     Lit un fichier FASTA.
-    Retourne une liste de dicts :
-      { id, sequence, date_diagnostic }
-    La date est extraite directement depuis le header.
+    Retourne une liste de dicts { id, sequence, date_diagnostic }.
     """
     sequences = []
-    header = None
-    seq    = ""
+    header    = None
+    seq       = ""
 
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
@@ -84,11 +99,10 @@ def lire_fasta(path):
                 continue
             if line.startswith(">"):
                 if header is not None:
-                    seq_id = header[1:].split(".")[0]
                     sequences.append({
-                        "id":               seq_id,
-                        "sequence":         seq.upper(),
-                        "date_diagnostic":  parse_date_header(header),
+                        "id":              header[1:].split(".")[0],
+                        "sequence":        seq.upper(),
+                        "date_diagnostic": parse_date_header(header),
                     })
                 header = line
                 seq    = ""
@@ -96,41 +110,34 @@ def lire_fasta(path):
                 seq += line
 
     if header is not None:
-        seq_id = header[1:].split(".")[0]
         sequences.append({
-            "id":              seq_id,
+            "id":              header[1:].split(".")[0],
             "sequence":        seq.upper(),
             "date_diagnostic": parse_date_header(header),
         })
 
     return sequences
 
-
 # ============================================================
-# Section 2 — Chargement des données
+# Section 3 — Chargement des données
 # ============================================================
 
-def charger_tous_fasta(racine):
+def charger_tous_fasta(fasta_dir):
     """
-    Scanne racine/sequences/, charge tous les .fasta.
+    Charge tous les .fasta du dossier.
     Retourne une liste de dicts { id, sequence, date_diagnostic, pays, trimestre }.
     """
-    seq_dir = os.path.join(racine, "sequences")
-    if not os.path.isdir(seq_dir):
-        raise FileNotFoundError(f"Dossier introuvable : {seq_dir}")
+    fichiers = sorted(f for f in os.listdir(fasta_dir) if f.endswith(".fasta"))
+    print(f"\n  Chargement de {len(fichiers)} fichier(s) FASTA...")
 
     toutes = []
-    fichiers = sorted(f for f in os.listdir(seq_dir) if f.endswith(".fasta"))
-
-    print(f"  Chargement de {len(fichiers)} fichier(s) FASTA...")
-
     for fname in fichiers:
         pays, trimestre = extraire_pays_trimestre(fname)
         if pays is None:
-            print(f"  ⚠  Nom de fichier ignoré (format inattendu) : {fname}")
+            print(f"  ⚠  Nom ignoré (format inattendu) : {fname}")
             continue
 
-        seqs = lire_fasta(os.path.join(seq_dir, fname))
+        seqs = lire_fasta(os.path.join(fasta_dir, fname))
         for s in seqs:
             s["pays"]      = pays
             s["trimestre"] = trimestre
@@ -140,19 +147,16 @@ def charger_tous_fasta(racine):
     return toutes
 
 
-def charger_tous_metadata(racine, categories):
+def charger_tous_metadata(categories_dirs):
     """
-    Scanne racine/{categorie}/{pays}/*.csv, charge tous les CSV.
-    Retourne un dict { id → date } en gardant la date la plus précoce
-    si un ID apparaît dans plusieurs catégories.
-    Attend les colonnes 'id' et 'date'.
+    Charge tous les CSV depuis les dossiers catégorie/pays/*.csv.
+    Retourne un dict { id → date_la_plus_precoce }.
     """
-    dates_par_id = {}  # id → date la plus précoce
+    dates_par_id = {}
 
-    for categorie in categories:
-        cat_dir = os.path.join(racine, categorie)
+    for categorie, cat_dir in categories_dirs.items():
         if not os.path.isdir(cat_dir):
-            print(f"  ⚠  Dossier absent : {cat_dir}")
+            print(f"  ⚠  Dossier absent, ignoré : {cat_dir}")
             continue
 
         for pays in os.listdir(cat_dir):
@@ -163,16 +167,19 @@ def charger_tous_metadata(racine, categories):
             for fname in os.listdir(pays_dir):
                 if not fname.endswith(".csv"):
                     continue
-                path = os.path.join(pays_dir, fname)
 
+                path = os.path.join(pays_dir, fname)
                 with open(path, "r", encoding="utf-8", newline="") as f:
                     reader = csv.DictReader(f)
-                    if "id" not in (reader.fieldnames or []):
+                    fields = reader.fieldnames or []
+
+                    if "id" not in fields:
                         print(f"  ⚠  Colonne 'id' absente : {path}")
                         continue
-                    has_date = "date" in (reader.fieldnames or [])
+
+                    has_date = "date" in fields
                     if not has_date:
-                        print(f"  ⚠  Colonne 'date' absente : {path} — dates NA")
+                        print(f"  ⚠  Colonne 'date' absente : {path}")
 
                     for row in reader:
                         row_id = row.get("id", "").strip()
@@ -188,25 +195,34 @@ def charger_tous_metadata(racine, categories):
                             except ValueError:
                                 pass
 
-                        # On garde la date la plus précoce
+                        # Garde la date la plus précoce si ID déjà vu
                         if row_id not in dates_par_id:
                             dates_par_id[row_id] = date_val
                         elif date_val is not None:
                             if dates_par_id[row_id] is None or date_val < dates_par_id[row_id]:
                                 dates_par_id[row_id] = date_val
 
-    print(f"  → {len(dates_par_id)} ID avec métadonnées chargés")
+    print(f"  → {len(dates_par_id)} ID avec métadonnées")
     return dates_par_id
 
 
+def fusionner_dates(sequences, dates_meta):
+    """
+    Complète la date manquante d'une séquence avec les métadonnées CSV.
+    Priorité : date du header FASTA, sinon date du CSV.
+    """
+    for s in sequences:
+        if s["date_diagnostic"] is None:
+            s["date_diagnostic"] = dates_meta.get(s["id"])
+    return sequences
+
 # ============================================================
-# Section 3 — Fonctions de calcul
+# Section 4 — Calcul des distances
 # ============================================================
 
 def hamming_brut(seq1, seq2):
     """
-    Calcule la distance de Hamming entre deux séquences.
-    Ignore les positions ambiguës (N, -, ?, .).
+    Calcule la distance de Hamming en ignorant les bases ambiguës.
     Retourne (hamming, longueur_max, nb_sites_valides).
     """
     longueur = max(len(seq1), len(seq2))
@@ -214,8 +230,7 @@ def hamming_brut(seq1, seq2):
     valides  = 0
 
     for i in range(min(len(seq1), len(seq2))):
-        b1 = seq1[i]
-        b2 = seq2[i]
+        b1, b2 = seq1[i], seq2[i]
         if b1 in BASES_AMBIGUES or b2 in BASES_AMBIGUES:
             continue
         valides += 1
@@ -225,55 +240,24 @@ def hamming_brut(seq1, seq2):
     return hamming, longueur, valides
 
 
-def hamming_normalise(hamming, nb_valides):
-    """Retourne hamming / nb_valides, ou None si nb_valides == 0."""
-    if nb_valides == 0:
-        return None
-    return hamming / nb_valides
-
-
 def corriger_distance(dist_norm, date1, date2):
     """
-    Soustrait la dérive évolutive attendue entre deux dates.
+    Applique la correction temporelle :
     dist_corrigee = max(0, dist_norm - TAUX_EVOLUTION × delta_jours)
-    Retourne (dist_corrigee, delta_jours) — les deux peuvent être None
-    si l'une des dates est manquante.
+    Retourne (dist_corrigee, delta_jours) — None si date manquante.
     """
-    if dist_norm is None:
+    if dist_norm is None or date1 is None or date2 is None:
         return None, None
-    if date1 is None or date2 is None:
-        return None, None
-
     delta_jours = abs((date2 - date1).days)
-    derive      = TAUX_EVOLUTION * delta_jours
-    dist_corr   = max(0.0, dist_norm - derive)
+    dist_corr   = max(0.0, dist_norm - TAUX_EVOLUTION * delta_jours)
     return dist_corr, delta_jours
 
-
 # ============================================================
-# Section 4 — Fusion séquences + dates
-# ============================================================
-
-def fusionner_dates(sequences, dates_meta):
-    """
-    Pour chaque séquence, cherche sa date dans les métadonnées.
-    Priorité : date du header FASTA, sinon date des métadonnées CSV.
-    """
-    for s in sequences:
-        if s["date_diagnostic"] is None:
-            s["date_diagnostic"] = dates_meta.get(s["id"])
-    return sequences
-
-
-# ============================================================
-# Section 5 — Reprise sur crash
+# Section 5 — Checkpoint
 # ============================================================
 
 def charger_checkpoint(checkpoint_file):
-    """
-    Lit les paires déjà calculées depuis le checkpoint.
-    Retourne un set de clés "id1|||id2".
-    """
+    """Retourne un set de clés 'id1|||id2' déjà calculées."""
     deja_faites = set()
     if not os.path.isfile(checkpoint_file):
         return deja_faites
@@ -281,122 +265,100 @@ def charger_checkpoint(checkpoint_file):
     with open(checkpoint_file, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            cle = f"{row['id_seq1']}|||{row['id_seq2']}"
-            deja_faites.add(cle)
+            deja_faites.add(f"{row['id_seq1']}|||{row['id_seq2']}")
 
-    print(f"  ♻  Reprise : {len(deja_faites)} paire(s) déjà calculée(s)")
+    print(f"  ♻  Reprise : {len(deja_faites):,} paire(s) déjà calculée(s)")
     return deja_faites
 
 
 def init_checkpoint(checkpoint_file):
-    """Crée le fichier checkpoint avec l'en-tête si absent."""
+    """Crée le checkpoint avec l'en-tête si absent."""
     if not os.path.isfile(checkpoint_file):
         with open(checkpoint_file, "w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=COLONNES)
-            writer.writeheader()
+            csv.DictWriter(f, fieldnames=COLONNES).writeheader()
 
 
 def append_checkpoint(checkpoint_file, lignes):
     """Ajoute des lignes au checkpoint sans réécrire l'en-tête."""
     with open(checkpoint_file, "a", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=COLONNES)
-        writer.writerows(lignes)
-
+        csv.DictWriter(f, fieldnames=COLONNES).writerows(lignes)
 
 # ============================================================
 # Section 6 — Calcul par chunks
 # ============================================================
 
 def calculer_paires(sequences, deja_faites, checkpoint_file):
-    """
-    Génère toutes les paires (triangulaire supérieure), filtre celles
-    déjà calculées, puis calcule par chunks de CHUNK_SIZE.
-    """
-    n = len(sequences)
-    nb_paires_total = n * (n - 1) // 2
-    print(f"\n  {n} séquences → {nb_paires_total:,} paires totales")
+    n              = len(sequences)
+    nb_total       = n * (n - 1) // 2
+    nb_restantes   = nb_total - len(deja_faites)
+    nb_chunks      = max(1, (nb_restantes + CHUNK_SIZE - 1) // CHUNK_SIZE)
 
-    # Génère les paires non encore calculées
-    def paires_restantes():
-        for i, j in itertools.combinations(range(n), 2):
-            s1 = sequences[i]
-            s2 = sequences[j]
-            cle = f"{s1['id']}|||{s2['id']}"
-            if cle not in deja_faites:
-                yield s1, s2
+    print(f"\n  {n} séquences → {nb_total:,} paires totales")
+    print(f"  {nb_restantes:,} restante(s) → {nb_chunks} chunk(s) de {CHUNK_SIZE}")
 
-    nb_restantes  = nb_paires_total - len(deja_faites)
-    nb_chunks     = (nb_restantes + CHUNK_SIZE - 1) // CHUNK_SIZE
-    print(f"  {nb_restantes:,} paire(s) restante(s) → {nb_chunks} chunk(s) de {CHUNK_SIZE}")
-
-    chunk       = []
+    chunk        = []
     nb_calculees = 0
-    chunk_num   = 0
+    chunk_num    = 0
 
-    for s1, s2 in paires_restantes():
-        h, lon, val     = hamming_brut(s1["sequence"], s2["sequence"])
-        dist_norm       = hamming_normalise(h, val)
-        dist_corr, dj   = corriger_distance(
-            dist_norm, s1["date_diagnostic"], s2["date_diagnostic"]
-        )
+    for i, j in itertools.combinations(range(n), 2):
+        s1  = sequences[i]
+        s2  = sequences[j]
+        cle = f"{s1['id']}|||{s2['id']}"
 
-        lien = None
-        if dist_corr is not None:
-            lien = dist_corr <= SEUIL_LIEN
+        if cle in deja_faites:
+            continue
+
+        h, lon, val   = hamming_brut(s1["sequence"], s2["sequence"])
+        dist_norm     = (h / val) if val > 0 else None
+        dist_corr, dj = corriger_distance(dist_norm, s1["date_diagnostic"], s2["date_diagnostic"])
+        lien          = (dist_corr <= SEUIL_LIEN) if dist_corr is not None else None
 
         chunk.append({
-            "id_seq1":         s1["id"],
-            "id_seq2":         s2["id"],
-            "pays_seq1":       s1["pays"],
-            "pays_seq2":       s2["pays"],
-            "trimestre_seq1":  s1["trimestre"],
-            "trimestre_seq2":  s2["trimestre"],
-            "hamming_brut":    h,
-            "longueur_ref":    lon,
-            "nb_sites_valides":val,
-            "dist_normalisee": round(dist_norm, 8) if dist_norm is not None else "",
-            "delta_jours":     dj if dj is not None else "",
-            "dist_corrigee":   round(dist_corr, 8) if dist_corr is not None else "",
-            "lien_possible":   lien if lien is not None else "",
+            "id_seq1":          s1["id"],
+            "id_seq2":          s2["id"],
+            "pays_seq1":        s1["pays"],
+            "pays_seq2":        s2["pays"],
+            "trimestre_seq1":   s1["trimestre"],
+            "trimestre_seq2":   s2["trimestre"],
+            "hamming_brut":     h,
+            "longueur_ref":     lon,
+            "nb_sites_valides": val,
+            "dist_normalisee":  round(dist_norm, 8) if dist_norm is not None else "",
+            "delta_jours":      dj if dj is not None else "",
+            "dist_corrigee":    round(dist_corr, 8) if dist_corr is not None else "",
+            "lien_possible":    lien if lien is not None else "",
         })
 
         if len(chunk) >= CHUNK_SIZE:
-            chunk_num   += 1
+            chunk_num    += 1
             nb_calculees += len(chunk)
             append_checkpoint(checkpoint_file, chunk)
             pct = nb_calculees / nb_restantes * 100 if nb_restantes else 100
             print(f"  Chunk {chunk_num}/{nb_chunks} — "
-                  f"{nb_calculees:,}/{nb_restantes:,} paires ({pct:.1f}%)")
+                  f"{nb_calculees:,}/{nb_restantes:,} ({pct:.1f}%)")
             chunk = []
             gc.collect()
             time.sleep(PAUSE_SECS)
 
-    # Dernier chunk incomplet
+    # Dernier chunk
     if chunk:
-        chunk_num   += 1
+        chunk_num    += 1
         nb_calculees += len(chunk)
         append_checkpoint(checkpoint_file, chunk)
         print(f"  Chunk {chunk_num}/{nb_chunks} — "
-              f"{nb_calculees:,}/{nb_restantes:,} paires (100%)")
+              f"{nb_calculees:,}/{nb_restantes:,} (100%)")
         gc.collect()
 
     return nb_calculees
-
 
 # ============================================================
 # Section 7 — Export final
 # ============================================================
 
 def export_final(checkpoint_file, output_file):
-    """
-    Lit le checkpoint complet, trie par id_seq1 puis id_seq2,
-    exporte dans output_file, affiche un résumé.
-    """
     lignes = []
     with open(checkpoint_file, "r", encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            lignes.append(row)
+        lignes = list(csv.DictReader(f))
 
     lignes.sort(key=lambda r: (r["id_seq1"], r["id_seq2"]))
 
@@ -411,69 +373,57 @@ def export_final(checkpoint_file, output_file):
     )
 
     print(f"\n{'='*60}")
-    print(f"  ✅ Export final terminé")
-    print(f"  Total paires  : {len(lignes):,}")
-    print(f"  Liens possibles détectés : {nb_liens:,}")
-    print(f"  Fichier de résultats : {output_file}")
+    print(f"  ✅ Terminé")
+    print(f"  Total paires           : {len(lignes):,}")
+    print(f"  Liens possibles        : {nb_liens:,}")
+    print(f"  Fichier de résultats   : {output_file}")
     print(f"{'='*60}")
-
 
 # ============================================================
 # Main
 # ============================================================
 
-if __name__ == "__main__":
-    print("=" * 60)
-    print("  Calcul des distances évolutives ADN")
-    print("=" * 60)
-    print(f"\n  Dossier racine   : {RACINE}")
-    print(f"  Seuil lien       : {SEUIL_LIEN}")
-    print(f"  Taux évolution   : {TAUX_EVOLUTION} sub/site/jour")
-    print(f"  Chunk size       : {CHUNK_SIZE}")
-    print(f"  Checkpoint       : {CHECKPOINT_FILE}")
-    print()
+print("\n" + "=" * 60)
+print("  Résumé")
+print("=" * 60)
+print(f"  FASTA      : {FASTA_DIR}")
+for cat, d in CATEGORIES_DIRS.items():
+    print(f"  {cat:12}: {d}")
+print(f"  Checkpoint : {CHECKPOINT_FILE}")
+print(f"  Sortie     : {OUTPUT_FILE}")
+print(f"  Seuil lien : {SEUIL_LIEN}  |  Taux évolution : {TAUX_EVOLUTION} sub/site/jour")
+print("=" * 60)
 
-    # — Chargement —
-    print("─" * 60)
-    print("  Chargement des séquences FASTA")
-    print("─" * 60)
-    sequences = charger_tous_fasta(RACINE)
+confirm = input("\nLancer le calcul ? (o/n) : ").strip().lower()
+if confirm != "o":
+    print("Annulé.")
+    exit(0)
 
-    print()
-    print("─" * 60)
-    print("  Chargement des métadonnées CSV")
-    print("─" * 60)
-    dates_meta = charger_tous_metadata(RACINE, CATEGORIES_META)
+# — Chargement —
+print("\n─" * 30)
+print("Chargement FASTA")
+sequences = charger_tous_fasta(FASTA_DIR)
 
-    # — Fusion dates —
-    sequences = fusionner_dates(sequences, dates_meta)
-    sans_date = sum(1 for s in sequences if s["date_diagnostic"] is None)
-    if sans_date:
-        print(f"\n  ⚠  {sans_date} séquence(s) sans date — "
-              f"dist_corrigee sera NA pour ces paires")
+print("\nChargement métadonnées CSV")
+dates_meta = charger_tous_metadata(CATEGORIES_DIRS)
 
-    # — Reprise —
-    print()
-    print("─" * 60)
-    print("  Vérification du checkpoint")
-    print("─" * 60)
-    init_checkpoint(CHECKPOINT_FILE)
-    deja_faites = charger_checkpoint(CHECKPOINT_FILE)
+sequences = fusionner_dates(sequences, dates_meta)
+sans_date = sum(1 for s in sequences if s["date_diagnostic"] is None)
+if sans_date:
+    print(f"  ⚠  {sans_date} séquence(s) sans date — dist_corrigee sera vide pour ces paires")
 
-    # — Calcul —
-    print()
-    print("─" * 60)
-    print("  Calcul des distances")
-    print("─" * 60)
-    debut = time.time()
-    nb_calculees = calculer_paires(sequences, deja_faites, CHECKPOINT_FILE)
-    duree = time.time() - debut
-    print(f"\n  Temps de calcul : {duree:.1f}s "
-          f"({duree/60:.1f} min)")
+# — Checkpoint —
+print("\nVérification checkpoint")
+init_checkpoint(CHECKPOINT_FILE)
+deja_faites = charger_checkpoint(CHECKPOINT_FILE)
 
-    # — Export —
-    print()
-    print("─" * 60)
-    print("  Export final")
-    print("─" * 60)
-    export_final(CHECKPOINT_FILE, OUTPUT_FILE)
+# — Calcul —
+print("\nCalcul des distances")
+debut        = time.time()
+nb_calculees = calculer_paires(sequences, deja_faites, CHECKPOINT_FILE)
+duree        = time.time() - debut
+print(f"\n  Temps : {duree:.1f}s ({duree/60:.1f} min)")
+
+# — Export —
+print("\nExport final")
+export_final(CHECKPOINT_FILE, OUTPUT_FILE)
