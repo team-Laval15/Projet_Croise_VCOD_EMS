@@ -27,9 +27,6 @@ CSV_DATASETS  = ["cancer", "biomedical", "social"]
 # Création des dossiers de sortie
 ensure_dir(os.path.join(OUT_DIR, "sequences"))
 ensure_dir(os.path.join(DUP_DIR, "sequences"))
-for ds in CSV_DATASETS:
-    ensure_dir(os.path.join(OUT_DIR, ds))
-    ensure_dir(os.path.join(DUP_DIR, ds))
 
 # ============================================================
 # Résumé
@@ -40,10 +37,11 @@ print("  Résumé")
 print("=" * 60)
 print(f"  FASTA anciens  : {FASTA_OLD_DIR}/")
 print(f"  FASTA nouveaux : {FASTA_NEW_DIR}/")
-print(f"  CSV anciens    : {CSV_OLD_DIR}/{{dataset}}/")
-print(f"  CSV nouveaux   : {CSV_NEW_DIR}/{{dataset}}/")
+print(f"  CSV anciens    : {CSV_OLD_DIR}/{{dataset}}/{{pays}}/")
+print(f"  CSV nouveaux   : {CSV_NEW_DIR}/{{dataset}}/{{pays}}/")
 print(f"  Sortie fusion  : {OUT_DIR}/")
 print(f"  Doublons       : {DUP_DIR}/")
+print(f"  Structure CSV  : {{dataset}}/{{pays}}/{{fichier}}.csv")
 print("=" * 60)
 
 confirm = input("\nLancer la fusion ? (o/n) : ").strip().lower()
@@ -174,77 +172,92 @@ for dataset in CSV_DATASETS:
     old_ds_dir = os.path.join(CSV_OLD_DIR, dataset)
     new_ds_dir = os.path.join(CSV_NEW_DIR, dataset)
 
-    old_csv_files = set(list_files(old_ds_dir, ".csv"))
-    new_csv_files = set(list_files(new_ds_dir, ".csv"))
-    all_csv_files = old_csv_files | new_csv_files
+    # Collecte tous les pays présents dans l'un ou l'autre dossier
+    old_countries = set(os.listdir(old_ds_dir)) if os.path.isdir(old_ds_dir) else set()
+    new_countries = set(os.listdir(new_ds_dir)) if os.path.isdir(new_ds_dir) else set()
+    all_countries = old_countries | new_countries
 
-    if not all_csv_files:
-        print(f"  ⚠  Aucun fichier CSV trouvé pour [{dataset}]")
+    if not all_countries:
+        print(f"  ⚠  Aucun dossier pays trouvé pour [{dataset}]")
         continue
 
     ds_stats = {"fichiers": 0, "lignes": 0, "doublons": 0}
-
     print(f"\n  [{dataset}]")
 
-    for filename in sorted(all_csv_files):
-        old_path = os.path.join(old_ds_dir, filename)
-        new_path = os.path.join(new_ds_dir, filename)
+    for country in sorted(all_countries):
+        old_country_dir = os.path.join(old_ds_dir, country)
+        new_country_dir = os.path.join(new_ds_dir, country)
 
-        rows_vues    = {}   # id → row dict  — première occurrence gardée
-        doublons_csv = {}   # id → row dict  — occurrences en doublon
-        fieldnames   = None
+        old_csv_files = set(list_files(old_country_dir, ".csv"))
+        new_csv_files = set(list_files(new_country_dir, ".csv"))
+        all_csv_files = old_csv_files | new_csv_files
 
-        # Lecture dans l'ordre : anciens d'abord, nouveaux ensuite
-        sources = []
-        if filename in old_csv_files:
-            sources.append(old_path)
-        if filename in new_csv_files:
-            sources.append(new_path)
-
-        for src in sources:
-            with open(src, "r", encoding="utf-8", newline="") as f:
-                reader = csv.DictReader(f)
-                if fieldnames is None:
-                    fieldnames = reader.fieldnames
-
-                for row in reader:
-                    row_id = row.get("id")
-                    if row_id is None:
-                        # Pas de colonne id → on garde tout sans dédup
-                        fake_id = f"__noid_{len(rows_vues)}"
-                        rows_vues[fake_id] = row
-                    elif row_id not in rows_vues:
-                        rows_vues[row_id] = row
-                    else:
-                        doublons_csv[row_id] = row
-
-        if not fieldnames:
-            print(f"    ⚠  {filename} — impossible de lire les colonnes, ignoré")
+        if not all_csv_files:
             continue
 
-        # Écriture du fichier fusionné
-        out_path = os.path.join(OUT_DIR, dataset, filename)
-        with open(out_path, "w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(rows_vues.values())
+        # Création des dossiers de sortie pour ce pays
+        ensure_dir(os.path.join(OUT_DIR, dataset, country))
+        ensure_dir(os.path.join(DUP_DIR, dataset, country))
 
-        # Écriture des doublons
-        if doublons_csv:
-            dup_path = os.path.join(DUP_DIR, dataset, filename)
-            with open(dup_path, "w", encoding="utf-8", newline="") as f:
+        print(f"    [{country}]")
+
+        for filename in sorted(all_csv_files):
+            old_path = os.path.join(old_country_dir, filename)
+            new_path = os.path.join(new_country_dir, filename)
+
+            rows_vues    = {}  # id → row dict — première occurrence gardée
+            doublons_csv = {}  # id → row dict — occurrences en doublon
+            fieldnames   = None
+
+            # Lecture dans l'ordre : anciens d'abord, nouveaux ensuite
+            sources = []
+            if filename in old_csv_files:
+                sources.append(old_path)
+            if filename in new_csv_files:
+                sources.append(new_path)
+
+            for src in sources:
+                with open(src, "r", encoding="utf-8", newline="") as f:
+                    reader = csv.DictReader(f)
+                    if fieldnames is None:
+                        fieldnames = reader.fieldnames
+                    for row in reader:
+                        row_id = row.get("id")
+                        if row_id is None:
+                            fake_id = f"__noid_{len(rows_vues)}"
+                            rows_vues[fake_id] = row
+                        elif row_id not in rows_vues:
+                            rows_vues[row_id] = row
+                        else:
+                            doublons_csv[row_id] = row
+
+            if not fieldnames:
+                print(f"      ⚠  {filename} — impossible de lire les colonnes, ignoré")
+                continue
+
+            # Écriture du fichier fusionné
+            out_path = os.path.join(OUT_DIR, dataset, country, filename)
+            with open(out_path, "w", encoding="utf-8", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
-                writer.writerows(doublons_csv.values())
+                writer.writerows(rows_vues.values())
 
-        ds_stats["fichiers"]  += 1
-        ds_stats["lignes"]    += len(rows_vues)
-        ds_stats["doublons"]  += len(doublons_csv)
+            # Écriture des doublons
+            if doublons_csv:
+                dup_path = os.path.join(DUP_DIR, dataset, country, filename)
+                with open(dup_path, "w", encoding="utf-8", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(doublons_csv.values())
 
-        status = f"    ✔  {filename}  ({len(rows_vues)} lignes"
-        if doublons_csv:
-            status += f", {len(doublons_csv)} doublon(s) mis de côté"
-        print(status + ")")
+            ds_stats["fichiers"]  += 1
+            ds_stats["lignes"]    += len(rows_vues)
+            ds_stats["doublons"]  += len(doublons_csv)
+
+            status = f"      ✔  {filename}  ({len(rows_vues)} lignes"
+            if doublons_csv:
+                status += f", {len(doublons_csv)} doublon(s) mis de côté"
+            print(status + ")")
 
     print(f"    → {ds_stats['fichiers']} fichier(s), "
           f"{ds_stats['lignes']} lignes uniques, "
