@@ -193,11 +193,22 @@ for filename in sorted(all_fasta_files):
         sources.append(new_path)
 
     for src in sources:
+        ids_ce_fichier = {}  # id → (header, seq) — première occurrence dans ce fichier
+
         for header, seq in read_fasta(src):
             seq_id = extract_fasta_id(header)
+
+            if seq_id in ids_ce_fichier:
+                # Doublon intra-fichier
+                candidats_dup.append((seq_id, header, seq))
+                continue
+
+            ids_ce_fichier[seq_id] = (header, seq)
+
             if seq_id not in sequences_vues:
                 sequences_vues[seq_id] = (header, seq)
             else:
+                # Doublon inter-fichiers
                 candidats_dup.append((seq_id, header, seq))
 
     # ── Étape 2 : réintégration des doublons du run précédent ─
@@ -335,6 +346,8 @@ for dataset in CSV_DATASETS:
                 sources.append(new_path)
 
             for src in sources:
+                ids_ce_fichier = set()  # IDs vus dans ce fichier uniquement
+
                 with open(src, "r", encoding="utf-8", newline="") as f:
                     reader = csv.DictReader(f)
                     if fieldnames is None:
@@ -344,10 +357,16 @@ for dataset in CSV_DATASETS:
                         if row_id is None:
                             fake_id = f"__noid_{len(rows_vues)}"
                             rows_vues[fake_id] = row
+                        elif row_id in ids_ce_fichier:
+                            # Doublon intra-fichier
+                            doublons_csv[row_id] = row
                         elif row_id not in rows_vues:
                             rows_vues[row_id] = row
+                            ids_ce_fichier.add(row_id)
                         else:
+                            # Doublon inter-fichiers
                             doublons_csv[row_id] = row
+                            ids_ce_fichier.add(row_id)
 
             if not fieldnames:
                 print(f"      ⚠  {filename} — impossible de lire les colonnes, ignoré")
